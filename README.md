@@ -28,7 +28,7 @@ cd golinks
 go mod download
 
 # Build the application
-go build -o golinks .
+go build -o golinks ./cmd/golinks
 
 # Run the server
 ./golinks
@@ -117,18 +117,31 @@ air
 go test ./...
 ```
 
-## Project Structure
+## Project Structure — Hexagonal Architecture
 
 ```
 golinks/
-├── main.go              # Application entry point
-├── handlers/
-│   └── handlers.go      # HTTP handlers
-├── models/
-│   └── link.go          # Data models
-├── storage/
-│   ├── storage.go       # Storage interface
-│   └── sqlite.go        # SQLite implementation
+├── cmd/golinks/
+│   └── main.go                        # Composition root — wires adapters to domain
+├── internal/
+│   ├── domain/
+│   │   ├── link.go                    # Entities (Link, LinkStats) and domain errors
+│   │   ├── ports.go                   # Port interfaces: LinkRepository, LinkService
+│   │   ├── service.go                 # Business-logic implementation of LinkService
+│   │   └── service_test.go            # Unit tests (mock repository)
+│   └── adapter/
+│       ├── http/
+│       │   ├── handler.go             # Driving adapter — HTTP handlers
+│       │   ├── handler_test.go        # httptest-based tests (mock service)
+│       │   └── templates.go           # HTML templates
+│       ├── postgres/
+│       │   └── repository.go          # Driven adapter — PostgreSQL
+│       └── sqlite/
+│           └── repository.go          # Driven adapter — SQLite
+├── .github/
+│   └── copilot-instructions.md        # Coding conventions & PR guidelines
+├── Dockerfile
+├── Makefile
 └── README.md
 ```
 

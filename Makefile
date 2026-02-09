@@ -2,7 +2,7 @@
 
 # Build the application
 build:
-	go build -o golinks .
+	go build -o golinks ./cmd/golinks
 
 # Run the application
 run: build
@@ -10,7 +10,7 @@ run: build
 
 # Run tests
 test:
-	go test -v ./...
+	go test -race -v ./...
 
 # Clean build artifacts
 clean:
@@ -29,7 +29,7 @@ deps:
 
 # Build for multiple platforms
 build-all:
-	GOOS=linux GOARCH=amd64 go build -o golinks-linux-amd64 .
-	GOOS=darwin GOARCH=amd64 go build -o golinks-darwin-amd64 .
-	GOOS=darwin GOARCH=arm64 go build -o golinks-darwin-arm64 .
-	GOOS=windows GOARCH=amd64 go build -o golinks-windows-amd64.exe .
+	GOOS=linux GOARCH=amd64 go build -o golinks-linux-amd64 ./cmd/golinks
+	GOOS=darwin GOARCH=amd64 go build -o golinks-darwin-amd64 ./cmd/golinks
+	GOOS=darwin GOARCH=arm64 go build -o golinks-darwin-arm64 ./cmd/golinks
+	GOOS=windows GOARCH=amd64 go build -o golinks-windows-amd64.exe ./cmd/golinks

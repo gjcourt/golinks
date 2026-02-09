@@ -1,6 +1,6 @@
 module github.com/george/golinks
 
-go 1.24.0
+go 1.21
 
 require github.com/gorilla/mux v1.8.1
 
@@ -9,4 +9,4 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.33
 )
 
-require golang.org/x/crypto v0.47.0 // indirect
+require golang.org/x/crypto v0.33.0

@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/george/golinks/internal/domain"
 	"github.com/gorilla/mux"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // ---------- request/response DTOs (transport concern) ----------
@@ -69,17 +71,22 @@ func statsToResponse(s *domain.LinkStats) StatsResponse {
 
 // Handler is the driving HTTP adapter. It depends only on domain.LinkService.
 type Handler struct {
-	svc domain.LinkService
+	svc  domain.LinkService
+	auth AuthConfig
 }
 
-// NewHandler creates a Handler wired to the given service.
-func NewHandler(svc domain.LinkService) *Handler {
-	return &Handler{svc: svc}
+// NewHandler creates a Handler wired to the given service and auth config.
+func NewHandler(svc domain.LinkService, auth AuthConfig) *Handler {
+	return &Handler{svc: svc, auth: auth}
 }
 
 // RegisterRoutes mounts all routes onto the given router.
 func (h *Handler) RegisterRoutes(r *mux.Router) {
+	authMW := RequireAuth(h.auth)
+
+	// Protected API routes
 	api := r.PathPrefix("/api").Subrouter()
+	api.Use(authMW)
 	api.HandleFunc("/links", h.ListLinks).Methods("GET")
 	api.HandleFunc("/links", h.CreateLink).Methods("POST")
 	api.HandleFunc("/links/{shortcode}", h.GetLink).Methods("GET")
@@ -87,8 +94,17 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/links/{shortcode}", h.DeleteLink).Methods("DELETE")
 	api.HandleFunc("/links/{shortcode}/stats", h.GetLinkStats).Methods("GET")
 
-	r.HandleFunc("/admin", h.AdminPage).Methods("GET")
-	r.HandleFunc("/admin/", h.AdminPage).Methods("GET")
+	// Login / logout — always accessible
+	r.HandleFunc("/login", h.LoginPage).Methods("GET")
+	r.HandleFunc("/login", h.HandleLogin).Methods("POST")
+	r.HandleFunc("/logout", h.HandleLogout).Methods("POST")
+
+	// Protected admin page
+	adminHandler := authMW(http.HandlerFunc(h.AdminPage))
+	r.Handle("/admin", adminHandler).Methods("GET")
+	r.Handle("/admin/", adminHandler).Methods("GET")
+
+	// Public routes
 	r.HandleFunc("/{shortcode}", h.Redirect).Methods("GET")
 	r.HandleFunc("/", h.HomePage).Methods("GET")
 }
@@ -238,4 +254,77 @@ func (h *Handler) HomePage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AdminPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(adminTemplate))
+}
+
+// LoginPage serves GET /login.
+func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
+	// If auth is disabled, redirect straight to admin.
+	if h.auth.Mode == AuthModeNone {
+		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+	// If already authenticated via session/proxy, redirect to admin.
+	if h.auth.Mode == AuthModeProxy {
+		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(loginTemplate))
+}
+
+// HandleLogin handles POST /login (local auth mode only).
+func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	if h.auth.Mode != AuthModeLocal {
+		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+
+	if username != h.auth.Username {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(loginErrorTemplate))
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword(h.auth.HashedPassword, []byte(password)); err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(loginErrorTemplate))
+		return
+	}
+
+	// Authentication successful — set session cookie.
+	expiry := time.Now().Add(time.Duration(h.auth.CookieMaxAge) * time.Second)
+	value := signSession(username, h.auth.Secret, expiry)
+	http.SetCookie(w, &http.Cookie{
+		Name:     h.auth.CookieName,
+		Value:    value,
+		Path:     "/",
+		MaxAge:   h.auth.CookieMaxAge,
+		HttpOnly: true,
+		Secure:   h.auth.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// HandleLogout handles POST /logout.
+func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     h.auth.CookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+	})
+	http.Redirect(w, r, "/", http.StatusFound)
 }

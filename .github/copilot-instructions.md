@@ -33,6 +33,8 @@ internal/
     http/
       handler.go                       # driving adapter — HTTP handlers depend on domain.LinkService
       handler_test.go                  # httptest-based tests (mock LinkService)
+      middleware.go                    # auth middleware (none/local/proxy modes, API key, session cookies)
+      middleware_test.go               # auth middleware tests
       templates.go                     # HTML templates (presentation concern)
     postgres/
       repository.go                    # driven adapter — implements domain.LinkRepository
@@ -47,6 +49,15 @@ internal/
 3. **HTTP request/response DTOs** (e.g., `CreateLinkRequest`) belong in the HTTP adapter, not the domain.
 4. **Storage errors** (`ErrNotFound`, `ErrAlreadyExists`) are defined in the domain; adapter implementations return them.
 5. When adding a new feature, start with the **domain** (entity + service method + tests), then add the adapter layer.
+
+## Authentication
+
+- Auth is an **adapter-layer concern** — lives in `internal/adapter/http/middleware.go`.
+- Three modes: `none` (default), `local` (username/password + session cookie), `proxy` (trusted reverse-proxy header, e.g. Authelia).
+- `AuthConfig` is built in the composition root (`cmd/golinks/main.go`) from env vars and passed to `NewHandler(svc, authCfg)`.
+- `RequireAuth(cfg)` middleware wraps the `/api` subrouter and `/admin` routes; `GET /{shortcode}` and `GET /` remain public.
+- API key (`Bearer` token) works in both `local` and `proxy` modes for programmatic access.
+- Session cookies use HMAC-SHA256 signing with configurable expiry.
 
 ## Code Style
 

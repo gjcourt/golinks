@@ -44,6 +44,54 @@ Environment variables:
 |----------|-------------|---------|
 | `GOLINKS_PORT` | Port to listen on | `8080` |
 | `GOLINKS_DB_PATH` | Path to SQLite database | `./golinks.db` |
+| `DATABASE_URL` | PostgreSQL connection string (overrides SQLite) | — |
+
+### Authentication
+
+GoLinks supports three authentication modes: **none** (default), **local** (single-user), and **proxy** (SSO via reverse proxy like Authelia).
+
+When auth is enabled, the `/admin` page and all `/api/*` endpoints require authentication. Shortcode redirects (`GET /{shortcode}`) and the home page remain public.
+
+#### Auth Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GOLINKS_AUTH_MODE` | `none`, `local`, or `proxy` | `none` |
+| `GOLINKS_AUTH_USERNAME` | Username (required for `local` mode) | — |
+| `GOLINKS_AUTH_PASSWORD` | Password (required for `local` mode) | — |
+| `GOLINKS_AUTH_SECRET` | HMAC secret for session cookies. If unset, a random secret is generated (sessions won't survive restarts) | random |
+| `GOLINKS_AUTH_HEADER` | Header containing username from reverse proxy (`proxy` mode) | `Remote-User` |
+| `GOLINKS_AUTH_TRUSTED_PROXIES` | Comma-separated IPs/CIDRs allowed to set the proxy header | (trust all) |
+| `GOLINKS_API_KEY` | Bearer token for programmatic API access | — |
+| `GOLINKS_COOKIE_SECURE` | Set to `true` to require HTTPS for session cookies | `false` |
+
+#### Local Auth Example
+
+```bash
+export GOLINKS_AUTH_MODE=local
+export GOLINKS_AUTH_USERNAME=admin
+export GOLINKS_AUTH_PASSWORD=changeme
+export GOLINKS_API_KEY=my-secret-key   # optional, for API access
+./golinks
+```
+
+#### Proxy Auth Example (Authelia)
+
+```bash
+export GOLINKS_AUTH_MODE=proxy
+export GOLINKS_AUTH_HEADER=Remote-User
+export GOLINKS_AUTH_TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12
+export GOLINKS_API_KEY=my-secret-key   # optional
+./golinks
+```
+
+#### API Key Usage
+
+When `GOLINKS_API_KEY` is set, include it as a Bearer token:
+
+```bash
+curl -H "Authorization: Bearer my-secret-key" http://localhost:8080/api/links
+```
 
 ## Usage
 
@@ -133,6 +181,8 @@ golinks/
 │       ├── http/
 │       │   ├── handler.go             # Driving adapter — HTTP handlers
 │       │   ├── handler_test.go        # httptest-based tests (mock service)
+│       │   ├── middleware.go          # Auth middleware (local, proxy, API key)
+│       │   ├── middleware_test.go     # Auth middleware tests
 │       │   └── templates.go           # HTML templates
 │       ├── postgres/
 │       │   └── repository.go          # Driven adapter — PostgreSQL

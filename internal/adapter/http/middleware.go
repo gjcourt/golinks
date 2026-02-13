@@ -20,9 +20,12 @@ import (
 type AuthMode string
 
 const (
-	AuthModeNone  AuthMode = "none"  // no authentication
-	AuthModeLocal AuthMode = "local" // single-user username/password with session cookie
-	AuthModeProxy AuthMode = "proxy" // trust a reverse-proxy header (e.g. Authelia)
+	// AuthModeNone disables authentication.
+	AuthModeNone AuthMode = "none"
+	// AuthModeLocal uses single-user username/password with session cookie.
+	AuthModeLocal AuthMode = "local"
+	// AuthModeProxy trusts a reverse-proxy header (e.g. Authelia).
+	AuthModeProxy AuthMode = "proxy"
 )
 
 // ---------- auth config ----------
@@ -163,7 +166,7 @@ func RequireAuth(cfg AuthConfig) func(http.Handler) http.Handler {
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
-				handleUnauthorized(w, r, cfg)
+				handleUnauthorized(w, r)
 				return
 
 			case AuthModeProxy:
@@ -179,7 +182,7 @@ func RequireAuth(cfg AuthConfig) func(http.Handler) http.Handler {
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
-				handleUnauthorized(w, r, cfg)
+				handleUnauthorized(w, r)
 				return
 
 			default:
@@ -254,12 +257,12 @@ func checkProxyHeader(r *http.Request, cfg AuthConfig, trustedNets []*net.IPNet)
 	return user
 }
 
-func handleUnauthorized(w http.ResponseWriter, r *http.Request, cfg AuthConfig) {
+func handleUnauthorized(w http.ResponseWriter, r *http.Request) {
 	// For API requests, return 401 JSON.
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":"authentication required"}`))
+		_, _ = w.Write([]byte(`{"error":"authentication required"}`))
 		return
 	}
 	// For browser requests, redirect to login page.

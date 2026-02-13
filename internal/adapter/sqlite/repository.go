@@ -1,3 +1,4 @@
+// Package sqlite implements the link repository using SQLite.
 package sqlite
 
 import (
@@ -38,6 +39,7 @@ func NewRepository(dbPath string) (*Repository, error) {
 	return &Repository{db: db}, nil
 }
 
+// CreateLink adds a new link to the database.
 func (r *Repository) CreateLink(link *domain.Link) error {
 	now := time.Now()
 	link.CreatedAt = now
@@ -60,6 +62,7 @@ func (r *Repository) CreateLink(link *domain.Link) error {
 	return nil
 }
 
+// GetLink retrieves a link by its shortcode.
 func (r *Repository) GetLink(shortcode string) (*domain.Link, error) {
 	link := &domain.Link{}
 	err := r.db.QueryRow(
@@ -72,6 +75,7 @@ func (r *Repository) GetLink(shortcode string) (*domain.Link, error) {
 	return link, err
 }
 
+// UpdateLink updates an existing link.
 func (r *Repository) UpdateLink(shortcode string, link *domain.Link) error {
 	link.UpdatedAt = time.Now()
 	result, err := r.db.Exec(
@@ -91,6 +95,7 @@ func (r *Repository) UpdateLink(shortcode string, link *domain.Link) error {
 	return nil
 }
 
+// DeleteLink deletes a link.
 func (r *Repository) DeleteLink(shortcode string) error {
 	result, err := r.db.Exec("DELETE FROM links WHERE shortcode = ?", shortcode)
 	if err != nil {
@@ -106,6 +111,7 @@ func (r *Repository) DeleteLink(shortcode string) error {
 	return nil
 }
 
+// ListLinks lists all links.
 func (r *Repository) ListLinks() ([]*domain.Link, error) {
 	rows, err := r.db.Query(
 		"SELECT id, shortcode, url, description, created_at, updated_at, click_count FROM links ORDER BY created_at DESC",
@@ -113,7 +119,7 @@ func (r *Repository) ListLinks() ([]*domain.Link, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var links []*domain.Link
 	for rows.Next() {
 		link := &domain.Link{}
@@ -125,6 +131,7 @@ func (r *Repository) ListLinks() ([]*domain.Link, error) {
 	return links, nil
 }
 
+// IncrementClickCount increments the click count for a link.
 func (r *Repository) IncrementClickCount(shortcode string) error {
 	_, err := r.db.Exec(
 		"UPDATE links SET click_count = click_count + 1, last_clicked = ? WHERE shortcode = ?",
@@ -133,6 +140,7 @@ func (r *Repository) IncrementClickCount(shortcode string) error {
 	return err
 }
 
+// GetStats retrieves statistics for a link.
 func (r *Repository) GetStats(shortcode string) (*domain.LinkStats, error) {
 	stats := &domain.LinkStats{Shortcode: shortcode}
 	var lastClicked sql.NullTime
@@ -152,6 +160,7 @@ func (r *Repository) GetStats(shortcode string) (*domain.LinkStats, error) {
 	return stats, nil
 }
 
+// Close closes the database connection.
 func (r *Repository) Close() error {
 	return r.db.Close()
 }

@@ -1,3 +1,4 @@
+// Package http provides request handlers.
 package http
 
 import (
@@ -115,7 +116,7 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if data != nil {
-		json.NewEncoder(w).Encode(data)
+		_ = json.NewEncoder(w).Encode(data)
 	}
 }
 
@@ -247,13 +248,13 @@ func (h *Handler) GetLinkStats(w http.ResponseWriter, r *http.Request) {
 // HomePage serves GET /.
 func (h *Handler) HomePage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(homeTemplate))
+	_, _ = w.Write([]byte(homeTemplate))
 }
 
 // AdminPage serves GET /admin.
 func (h *Handler) AdminPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(adminTemplate))
+	_, _ = w.Write([]byte(adminTemplate))
 }
 
 // LoginPage serves GET /login.
@@ -269,7 +270,7 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(loginTemplate))
+	_, _ = w.Write([]byte(loginTemplate))
 }
 
 // HandleLogin handles POST /login (local auth mode only).
@@ -290,14 +291,14 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if username != h.auth.Username {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(loginErrorTemplate))
+		_, _ = w.Write([]byte(loginErrorTemplate))
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword(h.auth.HashedPassword, []byte(password)); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(loginErrorTemplate))
+		_, _ = w.Write([]byte(loginErrorTemplate))
 		return
 	}
 

@@ -31,6 +31,7 @@ func main() {
 
 	handler := adapthttp.NewHandler(svc, authCfg)
 	r := mux.NewRouter()
+	r.Use(adapthttp.LoggingMiddleware)
 	handler.RegisterRoutes(r)
 
 	port := os.Getenv("GOLINKS_PORT")

@@ -312,7 +312,7 @@ func parseTrustedProxies(proxies []string) []*net.IPNet {
 // LoggingMiddleware logs the details of each request
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-start := time.Now()
+		start := time.Now()
 
 		rw := &loggingResponseWriter{ResponseWriter: w, code: http.StatusOK}
 		next.ServeHTTP(rw, r)

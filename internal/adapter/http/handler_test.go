@@ -18,6 +18,8 @@ import (
 // Mock LinkService
 // ---------------------------------------------------------------------------
 
+const testUser = "admin"
+
 type mockService struct {
 	links map[string]*domain.Link
 }
@@ -171,7 +173,7 @@ func TestListLinks_Empty(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 	var links []LinkResponse
-	json.NewDecoder(w.Body).Decode(&links)
+	_ = json.NewDecoder(w.Body).Decode(&links)
 	if len(links) != 0 {
 		t.Errorf("expected 0 links, got %d", len(links))
 	}
@@ -179,18 +181,19 @@ func TestListLinks_Empty(t *testing.T) {
 
 func TestUpdateLink_OK(t *testing.T) {
 	svc := newMockService()
-	seedLink(svc, "docs", "https://old.com")
+	seedLink(svc, "olddocs", "https://old.com")
 	r := setupRouter(svc)
 	body, _ := json.Marshal(UpdateLinkRequest{URL: "https://new.com"})
-	req := httptest.NewRequest("PUT", "/api/links/docs", bytes.NewReader(body))
+	req := httptest.NewRequest("PUT", "/api/links/olddocs", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 	var resp LinkResponse
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp.URL != "https://new.com" {
 		t.Errorf("url = %q, want %q", resp.URL, "https://new.com")
 	}
@@ -335,7 +338,7 @@ func TestHandleLogin_Success(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = "admin"
+	cfg.Username = testUser
 	// bcrypt hash of "password123"
 	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 	cfg.Secret = secret
@@ -372,7 +375,7 @@ func TestHandleLogin_WrongPassword(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = "admin"
+	cfg.Username = testUser
 	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("correct"), bcrypt.DefaultCost)
 	cfg.Secret = secret
 	NewHandler(newMockService(), cfg).RegisterRoutes(r)
@@ -413,7 +416,7 @@ func TestAdminPage_AuthRequired(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = "admin"
+	cfg.Username = testUser
 	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
 	cfg.Secret = secret
 	NewHandler(newMockService(), cfg).RegisterRoutes(r)
@@ -435,7 +438,7 @@ func TestAPI_AuthRequired(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = "admin"
+	cfg.Username = testUser
 	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
 	cfg.Secret = secret
 	NewHandler(newMockService(), cfg).RegisterRoutes(r)
@@ -454,7 +457,7 @@ func TestAPI_WithAPIKey(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = "admin"
+	cfg.Username = testUser
 	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
 	cfg.Secret = secret
 	cfg.APIKey = "my-secret-api-key"

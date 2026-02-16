@@ -207,7 +207,7 @@ func TestUpdateLink(t *testing.T) {
 
 	tests := []struct {
 		name, shortcode, url, desc string
-		wantErr                     error
+		wantErr                    error
 	}{
 		{"update-url", "docs", "https://new.com", "", nil},
 		{"update-desc", "docs", "", "new desc", nil},
@@ -226,7 +226,7 @@ func TestUpdateLink(t *testing.T) {
 func TestDeleteLink(t *testing.T) {
 	repo := newMockRepo()
 	svc := NewLinkService(repo)
-	svc.CreateLink("docs", "https://a.com", "")
+	_, _ = svc.CreateLink("docs", "https://a.com", "")
 
 	tests := []struct {
 		name, shortcode string
@@ -250,8 +250,8 @@ func TestListLinks(t *testing.T) {
 	if len(links) != 0 {
 		t.Fatalf("expected 0 links, got %d", len(links))
 	}
-	svc.CreateLink("a", "https://a.com", "")
-	svc.CreateLink("b", "https://b.com", "")
+	_, _ = svc.CreateLink("a", "https://a.com", "")
+	_, _ = svc.CreateLink("b", "https://b.com", "")
 	links, _ = svc.ListLinks()
 	if len(links) != 2 {
 		t.Fatalf("expected 2 links, got %d", len(links))
@@ -261,7 +261,9 @@ func TestListLinks(t *testing.T) {
 func TestRedirectLink(t *testing.T) {
 	repo := newMockRepo()
 	svc := NewLinkService(repo)
-	svc.CreateLink("docs", "https://docs.example.com", "")
+	if _, err := svc.CreateLink("docs", "https://docs.example.com", ""); err != nil {
+		t.Fatalf("create: %v", err)
+	}
 
 	link, err := svc.RedirectLink("docs")
 	if err != nil {

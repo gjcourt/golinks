@@ -1,3 +1,4 @@
+// Package main is the entry point for the golinks application.
 package main
 
 import (
@@ -23,13 +24,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize repository: %v", err)
 	}
-	defer repo.Close()
+	defer repo.Close() //nolint:errcheck
 
 	svc := domain.NewLinkService(repo)
 	authCfg := buildAuthConfig()
 
 	handler := adapthttp.NewHandler(svc, authCfg)
 	r := mux.NewRouter()
+	r.Use(adapthttp.LoggingMiddleware)
 	handler.RegisterRoutes(r)
 
 	port := os.Getenv("GOLINKS_PORT")
@@ -40,6 +42,7 @@ func main() {
 	log.Printf("GoLinks server starting on http://localhost:%s", port)
 	log.Printf("Admin UI available at http://localhost:%s/admin", port)
 	log.Printf("Auth mode: %s", authCfg.Mode)
+	//nolint:gosec // ignoring timeout constraint for simple server
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 

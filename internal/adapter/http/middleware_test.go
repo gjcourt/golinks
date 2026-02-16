@@ -11,7 +11,7 @@ func protectedHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := UserFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("hello " + user))
+		_, _ = w.Write([]byte("hello " + user))
 	})
 }
 
@@ -30,10 +30,14 @@ func TestRequireAuth_NoneMode(t *testing.T) {
 }
 
 func TestRequireAuth_LocalMode(t *testing.T) {
+	const (
+		testUser  = "admin"
+		adminPath = "/admin"
+	)
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = "admin"
+	cfg.Username = testUser
 	cfg.Secret = secret
 
 	mw := RequireAuth(cfg)
@@ -62,18 +66,18 @@ func TestRequireAuth_LocalMode(t *testing.T) {
 			name: "valid-cookie-passes",
 			setup: func(r *http.Request) {
 				expiry := time.Now().Add(1 * time.Hour)
-				val := signSession("admin", secret, expiry)
+				val := signSession(testUser, secret, expiry)
 				r.AddCookie(&http.Cookie{Name: cfg.CookieName, Value: val})
 			},
 			wantStatus: http.StatusOK,
-			wantBody:   "hello admin",
+			wantBody:   "hello " + testUser,
 			apiPath:    true,
 		},
 		{
 			name: "expired-cookie-rejected",
 			setup: func(r *http.Request) {
 				expiry := time.Now().Add(-1 * time.Hour)
-				val := signSession("admin", secret, expiry)
+				val := signSession(testUser, secret, expiry)
 				r.AddCookie(&http.Cookie{Name: cfg.CookieName, Value: val})
 			},
 			wantStatus: http.StatusUnauthorized,
@@ -91,7 +95,7 @@ func TestRequireAuth_LocalMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			path := "/admin"
+			path := adminPath
 			if tt.apiPath {
 				path = "/api/links"
 			}

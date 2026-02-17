@@ -28,13 +28,13 @@ func newMockService() *mockService {
 	return &mockService{links: make(map[string]*domain.Link)}
 }
 
-func (m *mockService) CreateLink(shortcode, url, desc string) (*domain.Link, error) {
+func (m *mockService) CreateLink(shortcode, url, desc, owner string) (*domain.Link, error) {
 	if _, ok := m.links[shortcode]; ok {
 		return nil, domain.ErrAlreadyExists
 	}
 	l := &domain.Link{
 		ID: int64(len(m.links) + 1), Shortcode: shortcode, URL: url,
-		Description: desc, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		Description: desc, Owner: owner, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	m.links[shortcode] = l
 	return l, nil
@@ -48,10 +48,13 @@ func (m *mockService) GetLink(shortcode string) (*domain.Link, error) {
 	return l, nil
 }
 
-func (m *mockService) UpdateLink(shortcode, url, desc string) (*domain.Link, error) {
+func (m *mockService) UpdateLink(shortcode, url, desc, username string, isAdmin bool) (*domain.Link, error) {
 	l, ok := m.links[shortcode]
 	if !ok {
 		return nil, domain.ErrNotFound
+	}
+	if !isAdmin && l.Owner != username {
+		return nil, domain.ErrForbidden
 	}
 	if url != "" {
 		l.URL = url
@@ -63,9 +66,13 @@ func (m *mockService) UpdateLink(shortcode, url, desc string) (*domain.Link, err
 	return l, nil
 }
 
-func (m *mockService) DeleteLink(shortcode string) error {
-	if _, ok := m.links[shortcode]; !ok {
+func (m *mockService) DeleteLink(shortcode, username string, isAdmin bool) error {
+	l, ok := m.links[shortcode]
+	if !ok {
 		return domain.ErrNotFound
+	}
+	if !isAdmin && l.Owner != username {
+		return domain.ErrForbidden
 	}
 	delete(m.links, shortcode)
 	return nil
@@ -96,11 +103,61 @@ func (m *mockService) GetLinkStats(shortcode string) (*domain.LinkStats, error) 
 	return &domain.LinkStats{Shortcode: shortcode, ClickCount: l.ClickCount}, nil
 }
 
+// ---------------------------------------------------------------------------
+// Mock UserRepository
+// ---------------------------------------------------------------------------
+
+type mockUserRepo struct {
+	users map[string]*domain.User
+}
+
+func newMockUserRepo() *mockUserRepo {
+	return &mockUserRepo{users: make(map[string]*domain.User)}
+}
+
+func (m *mockUserRepo) CreateUser(user *domain.User) error {
+	if _, ok := m.users[user.Username]; ok {
+		return domain.ErrAlreadyExists
+	}
+	user.ID = int64(len(m.users) + 1)
+	user.CreatedAt = time.Now()
+	stored := *user
+	m.users[user.Username] = &stored
+	return nil
+}
+
+func (m *mockUserRepo) GetUserByUsername(username string) (*domain.User, error) {
+	u, ok := m.users[username]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	copy := *u
+	return &copy, nil
+}
+
+func (m *mockUserRepo) CountUsers() (int64, error) {
+	return int64(len(m.users)), nil
+}
+
+func (m *mockUserRepo) Close() error { return nil }
+
+// seedUser adds a user to the mock repo with the given plaintext password and role.
+func seedUser(repo *mockUserRepo, username, password, role string) {
+	h, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	repo.users[username] = &domain.User{
+		ID:           int64(len(repo.users) + 1),
+		Username:     username,
+		PasswordHash: string(h),
+		Role:         role,
+		CreatedAt:    time.Now(),
+	}
+}
+
 // helpers
 
 func setupRouter(svc domain.LinkService) *mux.Router {
 	r := mux.NewRouter()
-	NewHandler(svc, DefaultAuthConfig()).RegisterRoutes(r)
+	NewHandler(svc, DefaultAuthConfig(), newMockUserRepo()).RegisterRoutes(r)
 	return r
 }
 
@@ -307,7 +364,7 @@ func TestLoginPage(t *testing.T) {
 	r := mux.NewRouter()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	NewHandler(newMockService(), cfg).RegisterRoutes(r)
+	NewHandler(newMockService(), cfg, newMockUserRepo()).RegisterRoutes(r)
 
 	req := httptest.NewRequest("GET", "/login", nil)
 	w := httptest.NewRecorder()
@@ -338,11 +395,11 @@ func TestHandleLogin_Success(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = testUser
-	// bcrypt hash of "password123"
-	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 	cfg.Secret = secret
-	NewHandler(newMockService(), cfg).RegisterRoutes(r)
+
+	userRepo := newMockUserRepo()
+	seedUser(userRepo, testUser, "password123", "admin")
+	NewHandler(newMockService(), cfg, userRepo).RegisterRoutes(r)
 
 	body := "username=admin&password=password123"
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(body))
@@ -375,10 +432,11 @@ func TestHandleLogin_WrongPassword(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = testUser
-	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("correct"), bcrypt.DefaultCost)
 	cfg.Secret = secret
-	NewHandler(newMockService(), cfg).RegisterRoutes(r)
+
+	userRepo := newMockUserRepo()
+	seedUser(userRepo, testUser, "correct", "admin")
+	NewHandler(newMockService(), cfg, userRepo).RegisterRoutes(r)
 
 	body := "username=admin&password=wrong"
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(body))
@@ -416,10 +474,11 @@ func TestAdminPage_AuthRequired(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = testUser
-	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
 	cfg.Secret = secret
-	NewHandler(newMockService(), cfg).RegisterRoutes(r)
+
+	userRepo := newMockUserRepo()
+	seedUser(userRepo, testUser, "pass", "admin")
+	NewHandler(newMockService(), cfg, userRepo).RegisterRoutes(r)
 
 	// Without cookie — browser request should redirect to /login
 	req := httptest.NewRequest("GET", "/admin", nil)
@@ -438,10 +497,11 @@ func TestAPI_AuthRequired(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = testUser
-	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
 	cfg.Secret = secret
-	NewHandler(newMockService(), cfg).RegisterRoutes(r)
+
+	userRepo := newMockUserRepo()
+	seedUser(userRepo, "regularuser", "pass", "user")
+	NewHandler(newMockService(), cfg, userRepo).RegisterRoutes(r)
 
 	// API request without auth should get 401
 	req := httptest.NewRequest("GET", "/api/links", nil)
@@ -457,11 +517,12 @@ func TestAPI_WithAPIKey(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = testUser
-	cfg.HashedPassword, _ = bcrypt.GenerateFromPassword([]byte("pass"), bcrypt.DefaultCost)
 	cfg.Secret = secret
 	cfg.APIKey = "my-secret-api-key"
-	NewHandler(newMockService(), cfg).RegisterRoutes(r)
+
+	userRepo := newMockUserRepo()
+	seedUser(userRepo, testUser, "pass", "admin")
+	NewHandler(newMockService(), cfg, userRepo).RegisterRoutes(r)
 
 	req := httptest.NewRequest("GET", "/api/links", nil)
 	req.Header.Set("Authorization", "Bearer my-secret-api-key")

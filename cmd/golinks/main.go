@@ -11,7 +11,6 @@ import (
 	"github.com/george/golinks/internal/adapter/postgres"
 	"github.com/george/golinks/internal/domain"
 	"github.com/gorilla/mux"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func main() {
@@ -26,10 +25,12 @@ func main() {
 	}
 	defer repo.Close() //nolint:errcheck
 
+	userRepo := postgres.NewUserRepository(repo.DB())
+
 	svc := domain.NewLinkService(repo)
 	authCfg := buildAuthConfig()
 
-	handler := adapthttp.NewHandler(svc, authCfg)
+	handler := adapthttp.NewHandler(svc, authCfg, userRepo)
 	r := mux.NewRouter()
 	r.Use(adapthttp.LoggingMiddleware)
 	handler.RegisterRoutes(r)
@@ -42,6 +43,15 @@ func main() {
 	log.Printf("GoLinks server starting on http://localhost:%s", port)
 	log.Printf("Admin UI available at http://localhost:%s/admin", port)
 	log.Printf("Auth mode: %s", authCfg.Mode)
+
+	// In local mode, check whether any users exist and hint at setup.
+	if authCfg.Mode == adapthttp.AuthModeLocal {
+		n, err := userRepo.CountUsers()
+		if err == nil && n == 0 {
+			log.Printf("No users found — visit http://localhost:%s/setup to create the first admin", port)
+		}
+	}
+
 	//nolint:gosec // ignoring timeout constraint for simple server
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
@@ -60,7 +70,7 @@ func buildAuthConfig() adapthttp.AuthConfig {
 		return cfg
 	}
 
-	// Secret for session signing (local mode)
+	// Secret for session signing
 	if secret := os.Getenv("GOLINKS_AUTH_SECRET"); secret != "" {
 		cfg.Secret = []byte(secret)
 	} else if cfg.Mode == adapthttp.AuthModeLocal {
@@ -70,23 +80,6 @@ func buildAuthConfig() adapthttp.AuthConfig {
 		}
 		cfg.Secret = s
 		log.Println("WARNING: No GOLINKS_AUTH_SECRET set — sessions will not survive restarts")
-	}
-
-	// Local mode credentials
-	if cfg.Mode == adapthttp.AuthModeLocal {
-		cfg.Username = os.Getenv("GOLINKS_AUTH_USERNAME")
-		if cfg.Username == "" {
-			log.Fatal("GOLINKS_AUTH_USERNAME is required in local auth mode")
-		}
-		password := os.Getenv("GOLINKS_AUTH_PASSWORD")
-		if password == "" {
-			log.Fatal("GOLINKS_AUTH_PASSWORD is required in local auth mode")
-		}
-		hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			log.Fatalf("Failed to hash password: %v", err)
-		}
-		cfg.HashedPassword = hashed
 	}
 
 	// Proxy mode settings

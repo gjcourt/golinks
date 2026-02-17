@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -32,8 +33,8 @@ func NormalizeURL(raw string) string {
 	return u
 }
 
-// CreateLink validates inputs and persists a new link.
-func (s *linkService) CreateLink(shortcode, url, description string) (*Link, error) {
+// CreateLink validates inputs and persists a new link owned by owner.
+func (s *linkService) CreateLink(shortcode, url, description, owner string) (*Link, error) {
 	shortcode = strings.TrimSpace(shortcode)
 	if !ValidShortcode(shortcode) {
 		return nil, errors.New("invalid shortcode: use only letters, numbers, hyphens, and underscores")
@@ -46,6 +47,7 @@ func (s *linkService) CreateLink(shortcode, url, description string) (*Link, err
 		Shortcode:   shortcode,
 		URL:         url,
 		Description: strings.TrimSpace(description),
+		Owner:       owner,
 	}
 	if err := s.repo.CreateLink(link); err != nil {
 		return nil, err
@@ -59,10 +61,14 @@ func (s *linkService) GetLink(shortcode string) (*Link, error) {
 }
 
 // UpdateLink patches the URL and/or description of an existing link.
-func (s *linkService) UpdateLink(shortcode, url, description string) (*Link, error) {
+// Only the owner or an admin may update a link.
+func (s *linkService) UpdateLink(shortcode, url, description, username string, isAdmin bool) (*Link, error) {
 	existing, err := s.repo.GetLink(shortcode)
 	if err != nil {
 		return nil, err
+	}
+	if !isAdmin && existing.Owner != username {
+		return nil, fmt.Errorf("%w: only the owner or an admin can update this link", ErrForbidden)
 	}
 	if url != "" {
 		existing.URL = NormalizeURL(url)
@@ -77,7 +83,15 @@ func (s *linkService) UpdateLink(shortcode, url, description string) (*Link, err
 }
 
 // DeleteLink removes a link.
-func (s *linkService) DeleteLink(shortcode string) error {
+// Only the owner or an admin may delete a link.
+func (s *linkService) DeleteLink(shortcode, username string, isAdmin bool) error {
+	existing, err := s.repo.GetLink(shortcode)
+	if err != nil {
+		return err
+	}
+	if !isAdmin && existing.Owner != username {
+		return fmt.Errorf("%w: only the owner or an admin can delete this link", ErrForbidden)
+	}
 	return s.repo.DeleteLink(shortcode)
 }
 

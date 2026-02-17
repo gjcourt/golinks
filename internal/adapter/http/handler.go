@@ -3,6 +3,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -33,6 +34,7 @@ type LinkResponse struct {
 	Shortcode   string `json:"shortcode"`
 	URL         string `json:"url"`
 	Description string `json:"description,omitempty"`
+	Owner       string `json:"owner,omitempty"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 	ClickCount  int64  `json:"click_count"`
@@ -51,6 +53,7 @@ func linkToResponse(l *domain.Link) LinkResponse {
 		Shortcode:   l.Shortcode,
 		URL:         l.URL,
 		Description: l.Description,
+		Owner:       l.Owner,
 		CreatedAt:   l.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:   l.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		ClickCount:  l.ClickCount,
@@ -72,13 +75,15 @@ func statsToResponse(s *domain.LinkStats) StatsResponse {
 
 // Handler is the driving HTTP adapter. It depends only on domain.LinkService.
 type Handler struct {
-	svc  domain.LinkService
-	auth AuthConfig
+	svc   domain.LinkService
+	auth  AuthConfig
+	users domain.UserRepository
 }
 
-// NewHandler creates a Handler wired to the given service and auth config.
-func NewHandler(svc domain.LinkService, auth AuthConfig) *Handler {
-	return &Handler{svc: svc, auth: auth}
+// NewHandler creates a Handler wired to the given service, auth config,
+// and user repository.
+func NewHandler(svc domain.LinkService, auth AuthConfig, users domain.UserRepository) *Handler {
+	return &Handler{svc: svc, auth: auth, users: users}
 }
 
 // RegisterRoutes mounts all routes onto the given router.
@@ -95,10 +100,12 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/links/{shortcode}", h.DeleteLink).Methods("DELETE")
 	api.HandleFunc("/links/{shortcode}/stats", h.GetLinkStats).Methods("GET")
 
-	// Login / logout — always accessible
+	// Login / logout / setup — always accessible
 	r.HandleFunc("/login", h.LoginPage).Methods("GET")
 	r.HandleFunc("/login", h.HandleLogin).Methods("POST")
 	r.HandleFunc("/logout", h.HandleLogout).Methods("POST")
+	r.HandleFunc("/setup", h.SetupPage).Methods("GET")
+	r.HandleFunc("/setup", h.HandleSetup).Methods("POST")
 
 	// Protected admin page
 	adminHandler := authMW(http.HandlerFunc(h.AdminPage))
@@ -164,7 +171,8 @@ func (h *Handler) CreateLink(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
-	link, err := h.svc.CreateLink(req.Shortcode, req.URL, req.Description)
+	owner := UserFromContext(r.Context())
+	link, err := h.svc.CreateLink(req.Shortcode, req.URL, req.Description, owner)
 	if err == domain.ErrAlreadyExists {
 		respondError(w, http.StatusConflict, "Shortcode already exists")
 		return
@@ -200,9 +208,15 @@ func (h *Handler) UpdateLink(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
-	link, err := h.svc.UpdateLink(shortcode, req.URL, req.Description)
+	username := UserFromContext(r.Context())
+	isAdmin := h.isAdmin(username)
+	link, err := h.svc.UpdateLink(shortcode, req.URL, req.Description, username, isAdmin)
 	if err == domain.ErrNotFound {
 		respondError(w, http.StatusNotFound, "Link not found")
+		return
+	}
+	if errors.Is(err, domain.ErrForbidden) {
+		respondError(w, http.StatusForbidden, "You are not allowed to update this link")
 		return
 	}
 	if err != nil {
@@ -216,9 +230,15 @@ func (h *Handler) UpdateLink(w http.ResponseWriter, r *http.Request) {
 // DeleteLink handles DELETE /api/links/{shortcode}.
 func (h *Handler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 	shortcode := mux.Vars(r)["shortcode"]
-	err := h.svc.DeleteLink(shortcode)
+	username := UserFromContext(r.Context())
+	isAdmin := h.isAdmin(username)
+	err := h.svc.DeleteLink(shortcode, username, isAdmin)
 	if err == domain.ErrNotFound {
 		respondError(w, http.StatusNotFound, "Link not found")
+		return
+	}
+	if errors.Is(err, domain.ErrForbidden) {
+		respondError(w, http.StatusForbidden, "You are not allowed to delete this link")
 		return
 	}
 	if err != nil {
@@ -288,14 +308,15 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 
-	if username != h.auth.Username {
+	user, err := h.users.GetUserByUsername(username)
+	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(loginErrorTemplate))
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword(h.auth.HashedPassword, []byte(password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(loginErrorTemplate))
@@ -328,4 +349,88 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 	})
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// SetupPage serves GET /setup.
+// It redirects to /login if at least one user already exists.
+func (h *Handler) SetupPage(w http.ResponseWriter, r *http.Request) {
+	if h.auth.Mode != AuthModeLocal {
+		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+	n, err := h.users.CountUsers()
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if n > 0 {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(setupTemplate))
+}
+
+// HandleSetup handles POST /setup — creates the first admin user.
+func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
+	if h.auth.Mode != AuthModeLocal {
+		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+	n, err := h.users.CountUsers()
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if n > 0 {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	if parseErr := r.ParseForm(); parseErr != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+	if username == "" || password == "" {
+		http.Error(w, "Username and password are required", http.StatusBadRequest)
+		return
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	user := &domain.User{
+		Username:     username,
+		PasswordHash: string(hashed),
+		Role:         "admin",
+	}
+	if err := h.users.CreateUser(user); err != nil {
+		http.Error(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("First admin user %q created via setup", username)
+	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+// isAdmin checks whether the given username has the admin role.
+func (h *Handler) isAdmin(username string) bool {
+	if username == "" {
+		return false
+	}
+	// In proxy mode, the first user or env-configured admin gets admin.
+	// In none mode, everyone is effectively admin.
+	if h.auth.Mode == AuthModeNone {
+		return true
+	}
+	u, err := h.users.GetUserByUsername(username)
+	if err != nil {
+		return false
+	}
+	return u.Role == "admin"
 }

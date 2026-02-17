@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -169,7 +170,7 @@ func TestCreateLink(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewLinkService(newMockRepo())
-			link, err := svc.CreateLink(tt.shortcode, tt.url, tt.desc)
+			link, err := svc.CreateLink(tt.shortcode, tt.url, tt.desc, "alice")
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
@@ -182,6 +183,9 @@ func TestCreateLink(t *testing.T) {
 			if link.Shortcode != tt.shortcode {
 				t.Errorf("shortcode = %q, want %q", link.Shortcode, tt.shortcode)
 			}
+			if link.Owner != "alice" {
+				t.Errorf("owner = %q, want %q", link.Owner, "alice")
+			}
 		})
 	}
 }
@@ -189,10 +193,10 @@ func TestCreateLink(t *testing.T) {
 func TestCreateLink_Duplicate(t *testing.T) {
 	repo := newMockRepo()
 	svc := NewLinkService(repo)
-	if _, err := svc.CreateLink("docs", "https://a.com", ""); err != nil {
+	if _, err := svc.CreateLink("docs", "https://a.com", "", "alice"); err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	_, err := svc.CreateLink("docs", "https://b.com", "")
+	_, err := svc.CreateLink("docs", "https://b.com", "", "alice")
 	if err != ErrAlreadyExists {
 		t.Fatalf("expected ErrAlreadyExists, got %v", err)
 	}
@@ -201,7 +205,7 @@ func TestCreateLink_Duplicate(t *testing.T) {
 func TestUpdateLink(t *testing.T) {
 	repo := newMockRepo()
 	svc := NewLinkService(repo)
-	if _, err := svc.CreateLink("docs", "https://old.com", "old desc"); err != nil {
+	if _, err := svc.CreateLink("docs", "https://old.com", "old desc", "alice"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -215,7 +219,7 @@ func TestUpdateLink(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := svc.UpdateLink(tt.shortcode, tt.url, tt.desc)
+			_, err := svc.UpdateLink(tt.shortcode, tt.url, tt.desc, "alice", false)
 			if err != tt.wantErr {
 				t.Errorf("error = %v, want %v", err, tt.wantErr)
 			}
@@ -223,10 +227,30 @@ func TestUpdateLink(t *testing.T) {
 	}
 }
 
+func TestUpdateLink_Authorization(t *testing.T) {
+	repo := newMockRepo()
+	svc := NewLinkService(repo)
+	if _, err := svc.CreateLink("docs", "https://old.com", "desc", "alice"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Non-owner should be forbidden
+	_, err := svc.UpdateLink("docs", "https://new.com", "", "bob", false)
+	if !errors.Is(err, ErrForbidden) {
+		t.Errorf("expected ErrForbidden, got %v", err)
+	}
+
+	// Admin non-owner should succeed
+	_, err = svc.UpdateLink("docs", "https://admin.com", "", "bob", true)
+	if err != nil {
+		t.Errorf("admin update: unexpected error: %v", err)
+	}
+}
+
 func TestDeleteLink(t *testing.T) {
 	repo := newMockRepo()
 	svc := NewLinkService(repo)
-	_, _ = svc.CreateLink("docs", "https://a.com", "")
+	_, _ = svc.CreateLink("docs", "https://a.com", "", "alice")
 
 	tests := []struct {
 		name, shortcode string
@@ -237,10 +261,28 @@ func TestDeleteLink(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := svc.DeleteLink(tt.shortcode); err != tt.wantErr {
+			if err := svc.DeleteLink(tt.shortcode, "alice", false); err != tt.wantErr {
 				t.Errorf("error = %v, want %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestDeleteLink_Authorization(t *testing.T) {
+	repo := newMockRepo()
+	svc := NewLinkService(repo)
+	_, _ = svc.CreateLink("docs", "https://a.com", "", "alice")
+
+	// Non-owner should be forbidden
+	err := svc.DeleteLink("docs", "bob", false)
+	if !errors.Is(err, ErrForbidden) {
+		t.Errorf("expected ErrForbidden, got %v", err)
+	}
+
+	// Admin non-owner should succeed
+	err = svc.DeleteLink("docs", "bob", true)
+	if err != nil {
+		t.Errorf("admin delete: unexpected error: %v", err)
 	}
 }
 
@@ -250,8 +292,8 @@ func TestListLinks(t *testing.T) {
 	if len(links) != 0 {
 		t.Fatalf("expected 0 links, got %d", len(links))
 	}
-	_, _ = svc.CreateLink("a", "https://a.com", "")
-	_, _ = svc.CreateLink("b", "https://b.com", "")
+	_, _ = svc.CreateLink("a", "https://a.com", "", "alice")
+	_, _ = svc.CreateLink("b", "https://b.com", "", "bob")
 	links, _ = svc.ListLinks()
 	if len(links) != 2 {
 		t.Fatalf("expected 2 links, got %d", len(links))
@@ -261,7 +303,7 @@ func TestListLinks(t *testing.T) {
 func TestRedirectLink(t *testing.T) {
 	repo := newMockRepo()
 	svc := NewLinkService(repo)
-	if _, err := svc.CreateLink("docs", "https://docs.example.com", ""); err != nil {
+	if _, err := svc.CreateLink("docs", "https://docs.example.com", "", "alice"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 

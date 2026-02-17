@@ -35,10 +35,8 @@ const (
 type AuthConfig struct {
 	Mode AuthMode
 
-	// Local mode fields
-	Username       string // plaintext username to match
-	HashedPassword []byte // bcrypt hash of the password
-	Secret         []byte // HMAC-SHA256 key for signing session cookies
+	// Session signing key (used by local mode)
+	Secret []byte // HMAC-SHA256 key for signing session cookies
 
 	// Proxy mode fields
 	ProxyHeader    string   // header to read username from (default: Remote-User)

@@ -37,7 +37,6 @@ func TestRequireAuth_LocalMode(t *testing.T) {
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	cfg.Username = testUser
 	cfg.Secret = secret
 
 	mw := RequireAuth(cfg)

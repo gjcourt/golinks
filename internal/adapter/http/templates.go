@@ -75,6 +75,9 @@ const loginTemplate = `<!DOCTYPE html>
             </div>
             <button type="submit" class="btn">Sign In</button>
         </form>
+        <p style="text-align: center; margin-top: 1rem;">
+            <a href="/register" style="color: #667eea; text-decoration: none;">Create an account</a>
+        </p>
     </div>
 </body>
 </html>`
@@ -163,6 +166,9 @@ const loginErrorTemplate = `<!DOCTYPE html>
             </div>
             <button type="submit" class="btn">Sign In</button>
         </form>
+        <p style="text-align: center; margin-top: 1rem;">
+            <a href="/register" style="color: #667eea; text-decoration: none;">Create an account</a>
+        </p>
     </div>
 </body>
 </html>`
@@ -391,8 +397,23 @@ const adminTemplate = `<!DOCTYPE html>
     <script>
         const API_BASE = '/api/links';
         let links = [];
+        let currentUser = null;
 
-        document.addEventListener('DOMContentLoaded', loadLinks);
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadCurrentUser();
+            loadLinks();
+        });
+
+        async function loadCurrentUser() {
+            try {
+                const response = await fetch('/api/me', { credentials: 'same-origin' });
+                if (response.ok) {
+                    currentUser = await response.json();
+                }
+            } catch (err) {
+                console.error('Failed to load current user', err);
+            }
+        }
 
         document.getElementById('shortcode').addEventListener('input', function() {
             const shortcode = this.value.trim();
@@ -448,8 +469,10 @@ const adminTemplate = `<!DOCTYPE html>
                                 <td>${escapeHtml(link.description || '-')}</td>
                                 <td class="stats">${link.click_count}</td>
                                 <td class="actions">
-                                    <button class="btn btn-small" onclick="editLink('${link.shortcode}')">Edit</button>
-                                    <button class="btn btn-small btn-danger" onclick="deleteLink('${link.shortcode}')">Delete</button>
+                                    ${(currentUser && (currentUser.is_admin || currentUser.username === link.owner)) ? ` + "`" + `
+                                        <button class="btn btn-small" onclick="editLink('${link.shortcode}')">Edit</button>
+                                        <button class="btn btn-small btn-danger" onclick="deleteLink('${link.shortcode}')">Delete</button>
+                                    ` + "`" + ` : ''}
                                 </td>
                             </tr>
                         ` + "`" + `).join('')}
@@ -578,12 +601,12 @@ const adminTemplate = `<!DOCTYPE html>
 </body>
 </html>`
 
-const setupTemplate = `<!DOCTYPE html>
+const registerTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GoLinks — Setup</title>
+    <title>GoLinks — Register</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -639,9 +662,9 @@ const setupTemplate = `<!DOCTYPE html>
 </head>
 <body>
     <div class="card">
-        <h1>GoLinks Setup</h1>
-        <p>Create the first admin account.</p>
-        <form method="POST" action="/setup">
+        <h1>GoLinks Register</h1>
+        <p>Create a new account.</p>
+        <form method="POST" action="/register">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username" required autofocus>
@@ -650,8 +673,11 @@ const setupTemplate = `<!DOCTYPE html>
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required>
             </div>
-            <button type="submit" class="btn">Create Admin Account</button>
+            <button type="submit" class="btn">Create Account</button>
         </form>
+        <p style="text-align: center; margin-top: 1rem;">
+            <a href="/login" style="color: #667eea; text-decoration: none;">Already have an account? Sign in</a>
+        </p>
     </div>
 </body>
 </html>`

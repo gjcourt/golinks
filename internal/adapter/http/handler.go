@@ -99,13 +99,14 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/links/{shortcode}", h.UpdateLink).Methods("PUT")
 	api.HandleFunc("/links/{shortcode}", h.DeleteLink).Methods("DELETE")
 	api.HandleFunc("/links/{shortcode}/stats", h.GetLinkStats).Methods("GET")
+	api.HandleFunc("/me", h.GetMe).Methods("GET")
 
-	// Login / logout / setup — always accessible
+	// Login / logout / register — always accessible
 	r.HandleFunc("/login", h.LoginPage).Methods("GET")
 	r.HandleFunc("/login", h.HandleLogin).Methods("POST")
 	r.HandleFunc("/logout", h.HandleLogout).Methods("POST")
-	r.HandleFunc("/setup", h.SetupPage).Methods("GET")
-	r.HandleFunc("/setup", h.HandleSetup).Methods("POST")
+	r.HandleFunc("/register", h.RegisterPage).Methods("GET")
+	r.HandleFunc("/register", h.HandleRegister).Methods("POST")
 
 	// Protected admin page
 	adminHandler := authMW(http.HandlerFunc(h.AdminPage))
@@ -265,6 +266,16 @@ func (h *Handler) GetLinkStats(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, statsToResponse(stats))
 }
 
+// GetMe handles GET /api/me.
+func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
+	username := UserFromContext(r.Context())
+	isAdmin := h.isAdmin(username)
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"username": username,
+		"is_admin": isAdmin,
+	})
+}
+
 // HomePage serves GET /.
 func (h *Handler) HomePage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -289,6 +300,14 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin", http.StatusFound)
 		return
 	}
+
+	// If no users exist, redirect to register
+	n, err := h.users.CountUsers()
+	if err == nil && n == 0 {
+		http.Redirect(w, r, "/register", http.StatusFound)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(loginTemplate))
 }
@@ -351,28 +370,19 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-// SetupPage serves GET /setup.
-// It redirects to /login if at least one user already exists.
-func (h *Handler) SetupPage(w http.ResponseWriter, r *http.Request) {
+// RegisterPage serves GET /register.
+func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
 	if h.auth.Mode != AuthModeLocal {
 		http.Redirect(w, r, "/admin", http.StatusFound)
-		return
-	}
-	n, err := h.users.CountUsers()
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	if n > 0 {
-		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(setupTemplate))
+	_, _ = w.Write([]byte(registerTemplate))
 }
 
-// HandleSetup handles POST /setup — creates the first admin user.
-func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
+// HandleRegister handles POST /register — creates a new user.
+// The first user created becomes an admin.
+func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	if h.auth.Mode != AuthModeLocal {
 		http.Redirect(w, r, "/admin", http.StatusFound)
 		return
@@ -380,10 +390,6 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 	n, err := h.users.CountUsers()
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	if n > 0 {
-		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
 
@@ -404,17 +410,22 @@ func (h *Handler) HandleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	role := "user"
+	if n == 0 {
+		role = "admin"
+	}
+
 	user := &domain.User{
 		Username:     username,
 		PasswordHash: string(hashed),
-		Role:         "admin",
+		Role:         role,
 	}
 	if err := h.users.CreateUser(user); err != nil {
 		http.Error(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("First admin user %q created via setup", username)
+	log.Printf("User %q created with role %q", username, role)
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 

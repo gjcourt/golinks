@@ -364,7 +364,11 @@ func TestLoginPage(t *testing.T) {
 	r := mux.NewRouter()
 	cfg := DefaultAuthConfig()
 	cfg.Mode = AuthModeLocal
-	NewHandler(newMockService(), cfg, newMockUserRepo()).RegisterRoutes(r)
+
+	userRepo := newMockUserRepo()
+	_ = userRepo.CreateUser(&domain.User{Username: "admin", Role: "admin"})
+
+	NewHandler(newMockService(), cfg, userRepo).RegisterRoutes(r)
 
 	req := httptest.NewRequest("GET", "/login", nil)
 	w := httptest.NewRecorder()

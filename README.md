@@ -8,15 +8,24 @@ A self-hosted go links service written in Go. Create short, memorable links like
 - 📊 Track click statistics
 - 🎨 Clean, modern web UI for managing links
 - 🚀 Fast and lightweight
-- 💾 SQLite storage (no external database required)
+- 💾 **In-Memory** (default) or **PostgreSQL** storage
+- 🔐 **Local**, **Proxy**, or **None** (public) authentication
 - 🔌 RESTful API for programmatic access
+
+## Documentation
+
+Full documentation is available in the [`docs/`](docs/) directory:
+
+- [**Authentication**](docs/authentication.md): Setup Local (username/password), Proxy (SSO), or None.
+- [**Database**](docs/database.md): Configure In-Memory or PostgreSQL storage.
+- [**API Reference**](docs/api.md): Endpoints and usage.
+- [**Admin Portal**](docs/admin.md): Managing links and themes.
 
 ## Quick Start
 
 ### Prerequisites
 
 - Go 1.21 or later
-- GCC (for SQLite compilation)
 
 ### Installation
 
@@ -27,14 +36,12 @@ cd golinks
 # Download dependencies
 go mod download
 
-# Build the application
-go build -o golinks ./cmd/golinks
-
-# Run the server
-./golinks
+# Run (In-Memory DB, No Auth)
+go run cmd/golinks/main.go
 ```
 
 The server will start on `http://localhost:8080`.
+By default, the **Admin Portal** is publicly accessible at `http://localhost:8080/admin`.
 
 ### Configuration
 
@@ -43,61 +50,27 @@ Environment variables:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `GOLINKS_PORT` | Port to listen on | `8080` |
-| `GOLINKS_DB_PATH` | Path to SQLite database | `./golinks.db` |
-| `DATABASE_URL` | PostgreSQL connection string (overrides SQLite) | — |
+| `DATABASE_URL` | PostgreSQL connection string (if unset, uses In-Memory) | — |
+| `GOLINKS_AUTH_MODE` | `none`, `local`, or `proxy` | `none` |
 
 ### Authentication
 
-GoLinks supports three authentication modes: **none** (default), **local** (single-user), and **proxy** (SSO via reverse proxy like Authelia).
+By default, authentication is **disabled** (`GOLINKS_AUTH_MODE=none`).
 
-When auth is enabled, the `/admin` page and all `/api/*` endpoints require authentication. Shortcode redirects (`GET /{shortcode}`) and the home page remain public.
-
-#### Auth Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GOLINKS_AUTH_MODE` | `none`, `local`, or `proxy` | `none` |
-| `GOLINKS_AUTH_USERNAME` | Username (required for `local` mode) | — |
-| `GOLINKS_AUTH_PASSWORD` | Password (required for `local` mode) | — |
-| `GOLINKS_AUTH_SECRET` | HMAC secret for session cookies. If unset, a random secret is generated (sessions won't survive restarts) | random |
-| `GOLINKS_AUTH_HEADER` | Header containing username from reverse proxy (`proxy` mode) | `Remote-User` |
-| `GOLINKS_AUTH_TRUSTED_PROXIES` | Comma-separated IPs/CIDRs allowed to set the proxy header | (trust all) |
-| `GOLINKS_API_KEY` | Bearer token for programmatic API access | — |
-| `GOLINKS_COOKIE_SECURE` | Set to `true` to require HTTPS for session cookies | `false` |
-
-#### Local Auth Example
+To enable **Local Authentication** (username/password):
 
 ```bash
 export GOLINKS_AUTH_MODE=local
-export GOLINKS_AUTH_USERNAME=admin
-export GOLINKS_AUTH_PASSWORD=changeme
-export GOLINKS_API_KEY=my-secret-key   # optional, for API access
-./golinks
+# Optional: persistent secret for sessions (highly recommended for production)
+export GOLINKS_AUTH_SECRET=my-random-secret-key
+
+go run cmd/golinks/main.go
 ```
 
-#### Proxy Auth Example (Authelia)
+1. Visit `http://localhost:8080/register` to create your first admin user.
+2. Login at `http://localhost:8080/login`.
 
-```bash
-export GOLINKS_AUTH_MODE=proxy
-export GOLINKS_AUTH_HEADER=Remote-User
-export GOLINKS_AUTH_TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12
-export GOLINKS_API_KEY=my-secret-key   # optional
-./golinks
-```
-
-#### API Key Usage
-
-When `GOLINKS_API_KEY` is set, include it as a Bearer token:
-
-```bash
-curl -H "Authorization: Bearer my-secret-key" http://localhost:8080/api/links
-```
-
-## Usage
-
-### Web Interface
-
-1. Open `http://localhost:8080/admin` in your browser
+For more details on **Proxy Authentication** and **API Keys**, see [docs/authentication.md](docs/authentication.md).
 2. Click "New Link" to create a link
 3. Enter a shortcode (e.g., `docs`) and destination URL
 4. Click "Save Link"

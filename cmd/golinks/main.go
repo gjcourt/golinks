@@ -8,24 +8,32 @@ import (
 	"strings"
 
 	adapthttp "github.com/george/golinks/internal/adapter/http"
+	"github.com/george/golinks/internal/adapter/memory"
 	"github.com/george/golinks/internal/adapter/postgres"
 	"github.com/george/golinks/internal/domain"
 	"github.com/gorilla/mux"
 )
 
 func main() {
+	var repo domain.LinkRepository
+	var userRepo domain.UserRepository
+
 	connStr := os.Getenv("DATABASE_URL")
-	if connStr == "" {
-		log.Fatal("DATABASE_URL is required")
-	}
+	if connStr != "" {
+		pgRepo, err := postgres.NewRepository(connStr)
+		if err != nil {
+			log.Fatalf("Failed to initialize repository: %v", err)
+		}
+		defer pgRepo.Close() //nolint:errcheck
 
-	repo, err := postgres.NewRepository(connStr)
-	if err != nil {
-		log.Fatalf("Failed to initialize repository: %v", err)
+		repo = pgRepo
+		userRepo = postgres.NewUserRepository(pgRepo.DB())
+	} else {
+		log.Println("DATABASE_URL not set; using in-memory repository")
+		memRepo := memory.NewRepository()
+		repo = memRepo
+		userRepo = memRepo
 	}
-	defer repo.Close() //nolint:errcheck
-
-	userRepo := postgres.NewUserRepository(repo.DB())
 
 	svc := domain.NewLinkService(repo)
 	authCfg := buildAuthConfig()

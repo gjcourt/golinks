@@ -1,0 +1,65 @@
+# Database Configuration
+
+GoLinks supports two database backends: **In-Memory** (default) and **PostgreSQL**.
+
+## In-Memory Database (Default)
+
+The In-Memory database is used whenever `DATABASE_URL` is **not set**.
+
+- **Pros**:
+  - No external dependencies.
+  - Zero setup; just run and go.
+  - Extremely fast.
+- **Cons**:
+  - **Data is lost** when the server stops or restarts.
+  - Not suitable for clusters or multiple replicas.
+
+## PostgreSQL Database
+
+For persistent storage and production environments, use PostgreSQL.
+
+### Configuration
+
+1. Set the `DATABASE_URL` environment variable:
+   ```bash
+   export DATABASE_URL=postgres://user:password@localhost:5432/golinks?sslmode=disable
+   ```
+2. Run the application as usual.
+
+### Docker Compose Example (PostgreSQL)
+
+Here is an example `docker-compose.yml` to run GoLinks with a PostgreSQL database:
+
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: golinks
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: golinks
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://golinks:mysecretpassword@db:5432/golinks?sslmode=disable
+      GOLINKS_AUTH_MODE: local
+      # ... other environment variables ...
+
+volumes:
+  pgdata:
+```
+
+### Migrations
+
+The application automatically creates the necessary tables (`links`, `users`) on startup if they do not exist. No manual migration steps are required.

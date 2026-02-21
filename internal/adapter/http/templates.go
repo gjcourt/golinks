@@ -7,10 +7,20 @@ const loginTemplate = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoLinks — Login</title>
     <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --bg-gradient: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        }
+        [data-theme="ocean"] { --primary: #2193b0; --secondary: #6dd5ed; }
+        [data-theme="sunset"] { --primary: #ee0979; --secondary: #ff6a00; }
+        [data-theme="forest"] { --primary: #11998e; --secondary: #38ef7d; }
+        [data-theme="dark"] { --primary: #232526; --secondary: #414345; }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-gradient);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -42,13 +52,13 @@ const loginTemplate = `<!DOCTYPE html>
         }
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--primary);
         }
         .btn {
             display: block;
             width: 100%;
             padding: 0.75rem;
-            background: #667eea;
+            background: var(--primary);
             color: white;
             border: none;
             border-radius: 6px;
@@ -56,12 +66,38 @@ const loginTemplate = `<!DOCTYPE html>
             cursor: pointer;
             font-weight: 600;
             margin-top: 1rem;
-            transition: background 0.2s;
+            transition: background 0.2s, opacity 0.2s;
         }
-        .btn:hover { background: #5a6fd6; }
+        .btn:hover { opacity: 0.9; }
+
+        .theme-switch {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+        }
+        .theme-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid white;
+            cursor: pointer;
+            display: inline-block;
+            margin: 0 2px;
+        }
     </style>
 </head>
 <body>
+    <div class="theme-switch">
+        <div class="theme-btn" style="background: #667eea" onclick="setTheme('default')" title="Default"></div>
+        <div class="theme-btn" style="background: #2193b0" onclick="setTheme('ocean')" title="Ocean"></div>
+        <div class="theme-btn" style="background: #ee0979" onclick="setTheme('sunset')" title="Sunset"></div>
+        <div class="theme-btn" style="background: #11998e" onclick="setTheme('forest')" title="Forest"></div>
+        <div class="theme-btn" style="background: #232526" onclick="setTheme('dark')" title="Dark"></div>
+    </div>
     <div class="card">
         <h1>🔗 GoLinks</h1>
         <form method="POST" action="/login">
@@ -76,9 +112,19 @@ const loginTemplate = `<!DOCTYPE html>
             <button type="submit" class="btn">Sign In</button>
         </form>
         <p style="text-align: center; margin-top: 1rem;">
-            <a href="/register" style="color: #667eea; text-decoration: none;">Create an account</a>
+            <a href="/register" style="color: var(--primary); text-decoration: none;">Create an account</a>
         </p>
     </div>
+    <script>
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+    </script>
 </body>
 </html>`
 
@@ -89,10 +135,20 @@ const loginErrorTemplate = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoLinks — Login</title>
     <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --bg-gradient: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        }
+        [data-theme="ocean"] { --primary: #2193b0; --secondary: #6dd5ed; }
+        [data-theme="sunset"] { --primary: #ee0979; --secondary: #ff6a00; }
+        [data-theme="forest"] { --primary: #11998e; --secondary: #38ef7d; }
+        [data-theme="dark"] { --primary: #232526; --secondary: #414345; }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-gradient);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -124,13 +180,13 @@ const loginErrorTemplate = `<!DOCTYPE html>
         }
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--primary);
         }
         .btn {
             display: block;
             width: 100%;
             padding: 0.75rem;
-            background: #667eea;
+            background: var(--primary);
             color: white;
             border: none;
             border-radius: 6px;
@@ -140,7 +196,7 @@ const loginErrorTemplate = `<!DOCTYPE html>
             margin-top: 1rem;
             transition: background 0.2s;
         }
-        .btn:hover { background: #5a6fd6; }
+        .btn:hover { opacity: 0.9; }
         .error {
             background: #f8d7da;
             color: #721c24;
@@ -149,9 +205,34 @@ const loginErrorTemplate = `<!DOCTYPE html>
             margin-bottom: 1rem;
             text-align: center;
         }
+        .theme-switch {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+        }
+        .theme-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid white;
+            cursor: pointer;
+            display: inline-block;
+            margin: 0 2px;
+        }
     </style>
 </head>
 <body>
+    <div class="theme-switch">
+        <div class="theme-btn" style="background: #667eea" onclick="setTheme('default')" title="Default"></div>
+        <div class="theme-btn" style="background: #2193b0" onclick="setTheme('ocean')" title="Ocean"></div>
+        <div class="theme-btn" style="background: #ee0979" onclick="setTheme('sunset')" title="Sunset"></div>
+        <div class="theme-btn" style="background: #11998e" onclick="setTheme('forest')" title="Forest"></div>
+        <div class="theme-btn" style="background: #232526" onclick="setTheme('dark')" title="Dark"></div>
+    </div>
     <div class="card">
         <h1>🔗 GoLinks</h1>
         <div class="error">Invalid username or password</div>
@@ -167,9 +248,19 @@ const loginErrorTemplate = `<!DOCTYPE html>
             <button type="submit" class="btn">Sign In</button>
         </form>
         <p style="text-align: center; margin-top: 1rem;">
-            <a href="/register" style="color: #667eea; text-decoration: none;">Create an account</a>
+            <a href="/register" style="color: var(--primary); text-decoration: none;">Create an account</a>
         </p>
     </div>
+    <script>
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+    </script>
 </body>
 </html>`
 
@@ -180,10 +271,20 @@ const homeTemplate = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoLinks</title>
     <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --bg-gradient: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        }
+        [data-theme="ocean"] { --primary: #2193b0; --secondary: #6dd5ed; }
+        [data-theme="sunset"] { --primary: #ee0979; --secondary: #ff6a00; }
+        [data-theme="forest"] { --primary: #11998e; --secondary: #38ef7d; }
+        [data-theme="dark"] { --primary: #232526; --secondary: #414345; }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-gradient);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -199,7 +300,7 @@ const homeTemplate = `<!DOCTYPE html>
             display: inline-block;
             padding: 1rem 2rem;
             background: white;
-            color: #667eea;
+            color: var(--primary);
             text-decoration: none;
             border-radius: 8px;
             font-weight: 600;
@@ -209,14 +310,49 @@ const homeTemplate = `<!DOCTYPE html>
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(0,0,0,0.2);
         }
+        .theme-switch {
+            position: absolute;
+            top: 2rem;
+            right: 2rem;
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+        }
+        .theme-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid white;
+            cursor: pointer;
+            display: inline-block;
+            margin: 0 2px;
+        }
     </style>
 </head>
 <body>
+    <div class="theme-switch">
+        <div class="theme-btn" style="background: #667eea" onclick="setTheme('default')" title="Default"></div>
+        <div class="theme-btn" style="background: #2193b0" onclick="setTheme('ocean')" title="Ocean"></div>
+        <div class="theme-btn" style="background: #ee0979" onclick="setTheme('sunset')" title="Sunset"></div>
+        <div class="theme-btn" style="background: #11998e" onclick="setTheme('forest')" title="Forest"></div>
+        <div class="theme-btn" style="background: #232526" onclick="setTheme('dark')" title="Dark"></div>
+    </div>
     <div class="container">
         <h1>🔗 GoLinks</h1>
         <p>Create and manage short links for your team</p>
         <a href="/admin" class="btn">Open Admin Panel</a>
     </div>
+    <script>
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+    </script>
 </body>
 </html>`
 
@@ -227,10 +363,42 @@ const adminTemplate = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoLinks Admin</title>
     <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --bg-body: #f5f5f5;
+            --bg-card: white;
+            --text-main: #333;
+            --text-muted: #666;
+            --border-color: #e0e0e0;
+        }
+        [data-theme="ocean"] {
+            --primary: #2193b0;
+            --secondary: #6dd5ed;
+        }
+        [data-theme="sunset"] {
+            --primary: #ee0979;
+            --secondary: #ff6a00;
+        }
+        [data-theme="forest"] {
+            --primary: #11998e;
+            --secondary: #38ef7d;
+        }
+        [data-theme="dark"] {
+            --primary: #8e9eab;
+            --secondary: #eef2f3;
+            --bg-body: #232526;
+            --bg-card: #414345;
+            --text-main: #f5f5f5;
+            --text-muted: #bbb;
+            --border-color: #555;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: #f5f5f5;
+            background: var(--bg-body);
+            color: var(--text-main);
             min-height: 100vh;
             padding: 2rem;
         }
@@ -241,23 +409,23 @@ const adminTemplate = `<!DOCTYPE html>
             align-items: center;
             margin-bottom: 2rem;
         }
-        h1 { color: #333; }
+        h1 { color: var(--text-main); }
         .btn {
             padding: 0.75rem 1.5rem;
-            background: #667eea;
+            background: var(--primary);
             color: white;
             border: none;
             border-radius: 6px;
             cursor: pointer;
             font-size: 1rem;
-            transition: background 0.2s;
+            transition: background 0.2s, opacity 0.2s;
         }
-        .btn:hover { background: #5a6fd6; }
+        .btn:hover { opacity: 0.9; }
         .btn-danger { background: #e74c3c; }
         .btn-danger:hover { background: #c0392b; }
         .btn-small { padding: 0.5rem 1rem; font-size: 0.875rem; }
         .card {
-            background: white;
+            background: var(--bg-card);
             border-radius: 12px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             padding: 1.5rem;
@@ -268,26 +436,30 @@ const adminTemplate = `<!DOCTYPE html>
             display: block;
             margin-bottom: 0.5rem;
             font-weight: 600;
-            color: #333;
+            color: var(--text-main);
         }
         .form-group input, .form-group textarea {
             width: 100%;
             padding: 0.75rem;
-            border: 2px solid #e0e0e0;
+            border: 2px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-main);
             border-radius: 6px;
             font-size: 1rem;
             transition: border-color 0.2s;
         }
         .form-group input:focus, .form-group textarea:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--primary);
         }
         .form-row { display: flex; gap: 1rem; }
         .form-row .form-group { flex: 1; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid #e0e0e0; }
-        th { font-weight: 600; color: #666; }
-        .shortcode { font-family: monospace; font-weight: 600; color: #667eea; }
+        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
+        th { font-weight: 600; color: var(--text-muted); }
+        .shortcode { font-family: monospace; font-weight: 600; color: var(--primary); }
+        a { color: var(--primary); text-decoration: none; }
+        a:hover { text-decoration: underline; }
         .url {
             max-width: 300px;
             overflow: hidden;
@@ -295,8 +467,8 @@ const adminTemplate = `<!DOCTYPE html>
             white-space: nowrap;
         }
         .actions { display: flex; gap: 0.5rem; }
-        .stats { color: #888; font-size: 0.875rem; }
-        .empty { text-align: center; padding: 3rem; color: #888; }
+        .stats { color: var(--text-muted); font-size: 0.875rem; }
+        .empty { text-align: center; padding: 3rem; color: var(--text-muted); }
         .message {
             padding: 1rem;
             border-radius: 6px;
@@ -307,7 +479,7 @@ const adminTemplate = `<!DOCTYPE html>
         .message.error { background: #f8d7da; color: #721c24; display: block; }
         .link-preview {
             font-size: 0.875rem;
-            color: #888;
+            color: var(--text-muted);
             margin-top: 0.25rem;
         }
         .modal {
@@ -324,11 +496,12 @@ const adminTemplate = `<!DOCTYPE html>
         }
         .modal.active { display: flex; }
         .modal-content {
-            background: white;
+            background: var(--bg-card);
             padding: 2rem;
             border-radius: 12px;
             width: 100%;
             max-width: 500px;
+            color: var(--text-main);
         }
         .modal-header {
             display: flex;
@@ -341,11 +514,38 @@ const adminTemplate = `<!DOCTYPE html>
             border: none;
             font-size: 1.5rem;
             cursor: pointer;
-            color: #888;
+            color: var(--text-muted);
+        }
+        .theme-switch {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--bg-card);
+            padding: 0.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+        .theme-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+            display: inline-block;
+            margin: 0 2px;
         }
     </style>
 </head>
 <body>
+    <div class="theme-switch">
+        <div class="theme-btn" style="background: #667eea" onclick="setTheme('default')" title="Default"></div>
+        <div class="theme-btn" style="background: #2193b0" onclick="setTheme('ocean')" title="Ocean"></div>
+        <div class="theme-btn" style="background: #ee0979" onclick="setTheme('sunset')" title="Sunset"></div>
+        <div class="theme-btn" style="background: #11998e" onclick="setTheme('forest')" title="Forest"></div>
+        <div class="theme-btn" style="background: #333333" onclick="setTheme('dark')" title="Dark"></div>
+    </div>
+
     <div class="container">
         <header>
             <h1>🔗 GoLinks Admin</h1>
@@ -395,6 +595,15 @@ const adminTemplate = `<!DOCTYPE html>
     </div>
 
     <script>
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+
         const API_BASE = '/api/links';
         let links = [];
         let currentUser = null;
@@ -608,10 +817,20 @@ const registerTemplate = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoLinks — Register</title>
     <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --bg-gradient: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        }
+        [data-theme="ocean"] { --primary: #2193b0; --secondary: #6dd5ed; }
+        [data-theme="sunset"] { --primary: #ee0979; --secondary: #ff6a00; }
+        [data-theme="forest"] { --primary: #11998e; --secondary: #38ef7d; }
+        [data-theme="dark"] { --primary: #232526; --secondary: #414345; }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-gradient);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -642,12 +861,12 @@ const registerTemplate = `<!DOCTYPE html>
             font-size: 1rem;
             transition: border-color 0.2s;
         }
-        .form-group input:focus { outline: none; border-color: #667eea; }
+        .form-group input:focus { outline: none; border-color: var(--primary); }
         .btn {
             display: block;
             width: 100%;
             padding: 0.75rem;
-            background: #667eea;
+            background: var(--primary);
             color: white;
             border: none;
             border-radius: 6px;
@@ -657,10 +876,35 @@ const registerTemplate = `<!DOCTYPE html>
             margin-top: 1rem;
             transition: background 0.2s;
         }
-        .btn:hover { background: #5a6fd6; }
+        .btn:hover { opacity: 0.9; }
+        .theme-switch {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+        }
+        .theme-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid white;
+            cursor: pointer;
+            display: inline-block;
+            margin: 0 2px;
+        }
     </style>
 </head>
 <body>
+    <div class="theme-switch">
+        <div class="theme-btn" style="background: #667eea" onclick="setTheme('default')" title="Default"></div>
+        <div class="theme-btn" style="background: #2193b0" onclick="setTheme('ocean')" title="Ocean"></div>
+        <div class="theme-btn" style="background: #ee0979" onclick="setTheme('sunset')" title="Sunset"></div>
+        <div class="theme-btn" style="background: #11998e" onclick="setTheme('forest')" title="Forest"></div>
+        <div class="theme-btn" style="background: #232526" onclick="setTheme('dark')" title="Dark"></div>
+    </div>
     <div class="card">
         <h1>GoLinks Register</h1>
         <p>Create a new account.</p>
@@ -676,8 +920,18 @@ const registerTemplate = `<!DOCTYPE html>
             <button type="submit" class="btn">Create Account</button>
         </form>
         <p style="text-align: center; margin-top: 1rem;">
-            <a href="/login" style="color: #667eea; text-decoration: none;">Already have an account? Sign in</a>
+            <a href="/login" style="color: var(--primary); text-decoration: none;">Already have an account? Sign in</a>
         </p>
     </div>
+    <script>
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+    </script>
 </body>
 </html>`

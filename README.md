@@ -20,6 +20,7 @@ Full documentation is available in the [`docs/`](docs/) directory:
 - [**Database**](docs/database.md): Configure In-Memory or PostgreSQL storage.
 - [**API Reference**](docs/api.md): Endpoints and usage.
 - [**Admin Portal**](docs/admin.md): Managing links and themes.
+- [**Architecture**](docs/architecture.md): Hexagonal architecture details.
 
 ## Quick Start
 

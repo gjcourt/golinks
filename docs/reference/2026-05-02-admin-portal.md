@@ -1,3 +1,12 @@
+---
+title: GoLinks admin portal
+status: Stable
+created: 2026-05-02
+updated: 2026-05-02
+updated_by: gjcourt
+tags: [reference, admin, ui]
+---
+
 # Admin Portal
 
 The Admin Portal provides a user-friendly interface for managing your short links.

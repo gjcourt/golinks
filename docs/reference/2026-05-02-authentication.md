@@ -1,3 +1,12 @@
+---
+title: GoLinks authentication modes
+status: Stable
+created: 2026-05-02
+updated: 2026-05-02
+updated_by: gjcourt
+tags: [reference, auth, sso]
+---
+
 # Authentication
 
 GoLinks supports three authentication modes: **`none`**, **`local`**, and **`proxy`**.

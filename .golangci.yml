@@ -18,6 +18,7 @@ linters:
     - misspell
     - unconvert
     - unparam
+    - depguard
   settings:
     govet:
       enable-all: true
@@ -32,6 +33,32 @@ linters:
           disabled: false
         - name: package-comments
           disabled: false
+    depguard:
+      rules:
+        # domain must not import adapter implementations — adapters implement
+        # domain interfaces, not the reverse.
+        domain-no-adapters:
+          files:
+            - "**/internal/domain/**/*.go"
+          deny:
+            - pkg: "github.com/george/golinks/internal/adapter"
+              desc: "domain must not import adapter implementations"
+
+        # Each adapter is an independent translation layer; siblings must not
+        # cross-import. Remove entries as adapters are promoted to implement
+        # formal outbound port interfaces.
+        adapters-no-cross-import:
+          files:
+            - "**/internal/adapter/**/*.go"
+          deny:
+            - pkg: "github.com/george/golinks/internal/adapter/http"
+              desc: "adapters must not import sibling adapters"
+            - pkg: "github.com/george/golinks/internal/adapter/memory"
+              desc: "adapters must not import sibling adapters"
+            - pkg: "github.com/george/golinks/internal/adapter/postgres"
+              desc: "adapters must not import sibling adapters"
+            - pkg: "github.com/george/golinks/internal/adapter/sqlite"
+              desc: "adapters must not import sibling adapters"
 
 formatters:
   enable:

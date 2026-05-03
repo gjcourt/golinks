@@ -10,13 +10,14 @@ import (
 	"github.com/george/golinks/internal/adapters/http"
 	"github.com/george/golinks/internal/adapters/memory"
 	"github.com/george/golinks/internal/adapters/postgres"
-	"github.com/george/golinks/internal/domain"
+	"github.com/george/golinks/internal/app"
+	outbound "github.com/george/golinks/internal/ports/outbound"
 	"github.com/gorilla/mux"
 )
 
 func main() {
-	var repo domain.LinkRepository
-	var userRepo domain.UserRepository
+	var repo outbound.LinkRepository
+	var userRepo outbound.UserRepository
 
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr != "" {
@@ -35,7 +36,7 @@ func main() {
 		userRepo = memRepo
 	}
 
-	svc := domain.NewLinkService(repo)
+	svc := app.NewLinkService(repo)
 	authCfg := buildAuthConfig()
 
 	handler := adapthttp.NewHandler(svc, authCfg, userRepo)

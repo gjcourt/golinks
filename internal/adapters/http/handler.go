@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/george/golinks/internal/domain"
+	inbound "github.com/george/golinks/internal/ports/inbound"
+	outbound "github.com/george/golinks/internal/ports/outbound"
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -73,16 +75,16 @@ func statsToResponse(s *domain.LinkStats) StatsResponse {
 
 // ---------- Handler ----------
 
-// Handler is the driving HTTP adapter. It depends only on domain.LinkService.
+// Handler is the driving HTTP adapter. It depends on inbound.LinkService and outbound.UserRepository.
 type Handler struct {
-	svc   domain.LinkService
+	svc   inbound.LinkService
 	auth  AuthConfig
-	users domain.UserRepository
+	users outbound.UserRepository
 }
 
 // NewHandler creates a Handler wired to the given service, auth config,
 // and user repository.
-func NewHandler(svc domain.LinkService, auth AuthConfig, users domain.UserRepository) *Handler {
+func NewHandler(svc inbound.LinkService, auth AuthConfig, users outbound.UserRepository) *Handler {
 	return &Handler{svc: svc, auth: auth, users: users}
 }
 

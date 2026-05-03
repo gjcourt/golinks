@@ -35,18 +35,33 @@ linters:
           disabled: false
     depguard:
       rules:
-        # domain must not import adapter implementations — adapters implement
-        # domain interfaces, not the reverse.
-        domain-no-adapters:
+        domain-no-other-internal:
           files:
             - "**/internal/domain/**/*.go"
           deny:
+            - pkg: "github.com/george/golinks/internal/ports"
+              desc: "domain must not import ports"
+            - pkg: "github.com/george/golinks/internal/app"
+              desc: "domain must not import app layer"
             - pkg: "github.com/george/golinks/internal/adapters"
-              desc: "domain must not import adapter implementations"
+              desc: "domain must not import adapters"
 
-        # Each adapter is an independent translation layer; siblings must not
-        # cross-import. Remove entries as adapters are promoted to implement
-        # formal outbound port interfaces.
+        ports-no-impl:
+          files:
+            - "**/internal/ports/**/*.go"
+          deny:
+            - pkg: "github.com/george/golinks/internal/app"
+              desc: "ports must not import app layer"
+            - pkg: "github.com/george/golinks/internal/adapters"
+              desc: "ports must not import adapters"
+
+        app-no-adapters:
+          files:
+            - "**/internal/app/**/*.go"
+          deny:
+            - pkg: "github.com/george/golinks/internal/adapters"
+              desc: "app layer must not import adapters directly"
+
         adapters-no-cross-import:
           files:
             - "**/internal/adapters/**/*.go"

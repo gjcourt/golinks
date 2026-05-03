@@ -20,14 +20,22 @@ Pre-push: `make all`
 
 Hexagonal architecture (ports & adapters). Entry point: `cmd/golinks/main.go`.
 
-- `internal/domain/` — link entities and core business rules.
-- `internal/adapters/http/` — HTTP server, handlers, templates (driving adapter).
-- `internal/adapters/memory/` — in-memory storage adapter.
-- `internal/adapters/postgres/` — PostgreSQL storage adapter.
-- `internal/adapters/sqlite/` — SQLite storage adapter.
-- `web/` — HTML templates and frontend assets.
+```
+cmd/golinks/          — composition root; wires adapters → app → handler
+internal/domain/      — entities, errors, pure domain helpers (ValidShortcode, NormalizeURL)
+internal/ports/
+  inbound/            — driving ports (LinkService interface consumed by HTTP handler)
+  outbound/           — driven ports (LinkRepository, UserRepository interfaces)
+internal/app/         — use-case layer (linkService implementation)
+internal/adapters/
+  http/               — HTTP server, handlers, templates (package adapthttp)
+  memory/             — in-memory storage adapter
+  postgres/           — PostgreSQL storage adapter
+  sqlite/             — SQLite storage adapter
+internal/testdoubles/ — function-field fakes for outbound ports
+```
 
-Today there is no explicit `internal/ports/` package or `internal/services/`/`internal/app/` layer; storage adapters implement domain interfaces directly. See `docs/architecture/` for the overview.
+See `docs/architecture/` for the overview.
 
 ## Conventions
 
@@ -39,7 +47,9 @@ Today there is no explicit `internal/ports/` package or `internal/services/`/`in
 
 ## Invariants
 
-- `internal/domain/` must not import any third-party packages outside stdlib.
+- `internal/domain/` must not import any third-party packages outside stdlib, and must not import ports/app/adapters.
+- `internal/ports/` must only import `internal/domain/`.
+- `internal/app/` must not import `internal/adapters/` — depend on port interfaces only.
 - `internal/adapters/<x>/` must not import `internal/adapters/<y>/` (adapters are siblings, not dependents).
 - The compiled binary lives at `./golinks`; never committed.
 - Local `golinks.db` (SQLite dev backend) is gitignored and never committed.

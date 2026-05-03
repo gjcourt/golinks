@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/george/golinks/internal/domain"
+	inbound "github.com/george/golinks/internal/ports/inbound"
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -155,7 +156,7 @@ func seedUser(repo *mockUserRepo, username, password, role string) {
 
 // helpers
 
-func setupRouter(svc domain.LinkService) *mux.Router {
+func setupRouter(svc inbound.LinkService) *mux.Router {
 	r := mux.NewRouter()
 	NewHandler(svc, DefaultAuthConfig(), newMockUserRepo()).RegisterRoutes(r)
 	return r

@@ -2,7 +2,7 @@ package adapthttp
 
 import (
 	"bytes"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +10,7 @@ import (
 )
 
 func TestLoggingMiddleware(t *testing.T) {
+	t.Parallel()
 	// Create a dummy handler
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
@@ -19,11 +20,12 @@ func TestLoggingMiddleware(t *testing.T) {
 	// Wrap it
 	handler := LoggingMiddleware(nextHandler)
 
-	// Capture log output
+	// Capture slog output by swapping the default logger for the duration
+	// of the test. LoggingMiddleware uses slog.Info on the default logger.
 	var buf bytes.Buffer
-	originalOutput := log.Writer()
-	log.SetOutput(&buf)
-	defer log.SetOutput(originalOutput)
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
 
 	req := httptest.NewRequest("GET", "/test-path", nil)
 	w := httptest.NewRecorder()
@@ -37,7 +39,9 @@ func TestLoggingMiddleware(t *testing.T) {
 
 	// Check log
 	logOutput := buf.String()
-	if !strings.Contains(logOutput, "GET") || !strings.Contains(logOutput, "/test-path") || !strings.Contains(logOutput, "418") {
+	if !strings.Contains(logOutput, "GET") ||
+		!strings.Contains(logOutput, "/test-path") ||
+		!strings.Contains(logOutput, "418") {
 		t.Errorf("Log output missing expected fields. Got: %s", logOutput)
 	}
 }

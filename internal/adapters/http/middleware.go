@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -236,7 +236,7 @@ func checkProxyHeader(r *http.Request, cfg AuthConfig, trustedNets []*net.IPNet)
 	if len(trustedNets) > 0 {
 		clientIP := extractIP(r.RemoteAddr)
 		if clientIP == nil {
-			log.Printf("auth: could not parse remote addr %q", r.RemoteAddr)
+			slog.Warn("auth: could not parse remote addr", "remote_addr", r.RemoteAddr)
 			return ""
 		}
 		trusted := false
@@ -247,7 +247,7 @@ func checkProxyHeader(r *http.Request, cfg AuthConfig, trustedNets []*net.IPNet)
 			}
 		}
 		if !trusted {
-			log.Printf("auth: untrusted proxy IP %s for header %s", clientIP, header)
+			slog.Warn("auth: untrusted proxy", "client_ip", clientIP, "header", header)
 			return ""
 		}
 	}
@@ -288,7 +288,7 @@ func parseTrustedProxies(proxies []string) []*net.IPNet {
 		if !strings.Contains(p, "/") {
 			ip := net.ParseIP(p)
 			if ip == nil {
-				log.Printf("auth: invalid trusted proxy IP %q", p)
+				slog.Warn("auth: invalid trusted proxy IP", "value", p)
 				continue
 			}
 			bits := 32
@@ -299,7 +299,7 @@ func parseTrustedProxies(proxies []string) []*net.IPNet {
 		}
 		_, cidr, err := net.ParseCIDR(p)
 		if err != nil {
-			log.Printf("auth: invalid trusted proxy CIDR %q: %v", p, err)
+			slog.Warn("auth: invalid trusted proxy CIDR", "value", p, "err", err)
 			continue
 		}
 		nets = append(nets, cidr)
@@ -315,7 +315,13 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		rw := &loggingResponseWriter{ResponseWriter: w, code: http.StatusOK}
 		next.ServeHTTP(rw, r)
 
-		log.Printf("[HTTP] %s %s %s %d %v", r.RemoteAddr, r.Method, r.URL.Path, rw.code, time.Since(start))
+		slog.Info("http",
+			"remote", r.RemoteAddr,
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rw.code,
+			"duration", time.Since(start),
+		)
 	})
 }
 

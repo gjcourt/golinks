@@ -41,7 +41,7 @@ linters:
           files:
             - "**/internal/domain/**/*.go"
           deny:
-            - pkg: "github.com/george/golinks/internal/adapter"
+            - pkg: "github.com/george/golinks/internal/adapters"
               desc: "domain must not import adapter implementations"
 
         # Each adapter is an independent translation layer; siblings must not
@@ -49,15 +49,15 @@ linters:
         # formal outbound port interfaces.
         adapters-no-cross-import:
           files:
-            - "**/internal/adapter/**/*.go"
+            - "**/internal/adapters/**/*.go"
           deny:
-            - pkg: "github.com/george/golinks/internal/adapter/http"
+            - pkg: "github.com/george/golinks/internal/adapters/http"
               desc: "adapters must not import sibling adapters"
-            - pkg: "github.com/george/golinks/internal/adapter/memory"
+            - pkg: "github.com/george/golinks/internal/adapters/memory"
               desc: "adapters must not import sibling adapters"
-            - pkg: "github.com/george/golinks/internal/adapter/postgres"
+            - pkg: "github.com/george/golinks/internal/adapters/postgres"
               desc: "adapters must not import sibling adapters"
-            - pkg: "github.com/george/golinks/internal/adapter/sqlite"
+            - pkg: "github.com/george/golinks/internal/adapters/sqlite"
               desc: "adapters must not import sibling adapters"
 
 formatters:

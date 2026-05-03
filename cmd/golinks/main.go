@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	adapthttp "github.com/george/golinks/internal/adapter/http"
-	"github.com/george/golinks/internal/adapter/memory"
-	"github.com/george/golinks/internal/adapter/postgres"
+	"github.com/george/golinks/internal/adapters/http"
+	"github.com/george/golinks/internal/adapters/memory"
+	"github.com/george/golinks/internal/adapters/postgres"
 	"github.com/george/golinks/internal/domain"
 	"github.com/gorilla/mux"
 )

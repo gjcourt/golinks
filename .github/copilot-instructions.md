@@ -63,7 +63,7 @@ internal/
 
 ## Authentication
 
-- Auth is an **adapter-layer concern** — lives in `internal/adapter/http/middleware.go`.
+- Auth is an **adapter-layer concern** — lives in `internal/adapters/http/middleware.go`.
 - Three modes: `none` (default), `local` (username/password + session cookie), `proxy` (trusted reverse-proxy header, e.g. Authelia).
 - `AuthConfig` is built in the composition root (`cmd/golinks/main.go`) from env vars and passed to `NewHandler(svc, authCfg)`.
 - `RequireAuth(cfg)` middleware wraps the `/api` subrouter and `/admin` routes; `GET /{shortcode}` and `GET /` remain public.

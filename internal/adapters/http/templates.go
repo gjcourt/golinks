@@ -1,4 +1,4 @@
-package http
+package adapthttp
 
 const loginTemplate = `<!DOCTYPE html>
 <html lang="en">

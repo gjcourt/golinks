@@ -1,5 +1,5 @@
-// Package http provides request handlers.
-package http
+// Package adapthttp provides request handlers.
+package adapthttp
 
 import (
 	"encoding/json"

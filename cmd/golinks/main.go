@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/george/golinks/internal/adapters/http"
+	adapthttp "github.com/george/golinks/internal/adapters/http"
 	"github.com/george/golinks/internal/adapters/memory"
 	"github.com/george/golinks/internal/adapters/postgres"
 	"github.com/george/golinks/internal/app"

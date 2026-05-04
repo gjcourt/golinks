@@ -13,7 +13,7 @@
 | `make clean` | Remove binary and dev artifacts |
 | `make all` | clean + lint + test + build |
 
-Single test: `go test ./internal/adapter/postgres -run TestStore -v`
+Single test: `go test ./internal/adapters/postgres -run TestStore -v`
 Pre-push: `make all`
 
 ## Architecture
@@ -21,10 +21,10 @@ Pre-push: `make all`
 Hexagonal architecture (ports & adapters). Entry point: `cmd/golinks/main.go`.
 
 - `internal/domain/` — link entities and core business rules.
-- `internal/adapter/http/` — HTTP server, handlers, templates (driving adapter).
-- `internal/adapter/memory/` — in-memory storage adapter.
-- `internal/adapter/postgres/` — PostgreSQL storage adapter.
-- `internal/adapter/sqlite/` — SQLite storage adapter.
+- `internal/adapters/http/` — HTTP server, handlers, templates (driving adapter).
+- `internal/adapters/memory/` — in-memory storage adapter.
+- `internal/adapters/postgres/` — PostgreSQL storage adapter.
+- `internal/adapters/sqlite/` — SQLite storage adapter.
 - `web/` — HTML templates and frontend assets.
 
 Today there is no explicit `internal/ports/` package or `internal/services/`/`internal/app/` layer; storage adapters implement domain interfaces directly. See `docs/architecture/` for the overview.
@@ -32,7 +32,7 @@ Today there is no explicit `internal/ports/` package or `internal/services/`/`in
 ## Conventions
 
 - **Domain has no infrastructure dependencies** — keep `internal/domain/` free of HTTP / SQL / vendor SDK imports.
-- **Storage backends are pluggable** — selected by `DATABASE_URL`/config; new backends implement the same domain interface in `internal/adapter/<name>/`.
+- **Storage backends are pluggable** — selected by `DATABASE_URL`/config; new backends implement the same domain interface in `internal/adapters/<name>/`.
 - **Auth modes**: `local` (username/password), `proxy` (SSO header), `none` (public) — see `docs/reference/2026-05-02-authentication.md`.
 - **Conventional Commits** for every commit (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `ci:`).
 - **Branch names** follow `<type>/<description>`.
@@ -40,7 +40,7 @@ Today there is no explicit `internal/ports/` package or `internal/services/`/`in
 ## Invariants
 
 - `internal/domain/` must not import any third-party packages outside stdlib.
-- `internal/adapter/<x>/` must not import `internal/adapter/<y>/` (adapters are siblings, not dependents).
+- `internal/adapters/<x>/` must not import `internal/adapters/<y>/` (adapters are siblings, not dependents).
 - The compiled binary lives at `./golinks`; never committed.
 - Local `golinks.db` (SQLite dev backend) is gitignored and never committed.
 
@@ -59,9 +59,9 @@ Self-hosted internal-link redirector. Users create short codes (e.g. `docs`) tha
 
 | Service | Interface | Purpose |
 |---|---|---|
-| PostgreSQL | `internal/adapter/postgres` | Production link storage (optional) |
-| SQLite | `internal/adapter/sqlite` | Single-binary deployment storage |
-| In-memory | `internal/adapter/memory` | Default / ephemeral storage |
+| PostgreSQL | `internal/adapters/postgres` | Production link storage (optional) |
+| SQLite | `internal/adapters/sqlite` | Single-binary deployment storage |
+| In-memory | `internal/adapters/memory` | Default / ephemeral storage |
 | SSO/proxy | HTTP request headers | Optional `proxy` auth mode |
 
 Deployed in the homelab cluster (`../homelab/apps/base/golinks/`); image-tag bumps must be coordinated with that deployment.

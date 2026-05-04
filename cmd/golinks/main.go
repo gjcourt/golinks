@@ -12,12 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/george/golinks/internal/adapters/http"
+	adapthttp "github.com/george/golinks/internal/adapters/http"
 	"github.com/george/golinks/internal/adapters/memory"
 	"github.com/george/golinks/internal/adapters/postgres"
 	"github.com/george/golinks/internal/adapters/sqlite"
 	"github.com/george/golinks/internal/app"
-	outbound "github.com/george/golinks/internal/ports/outbound"
+	"github.com/george/golinks/internal/ports/outbound"
 	"github.com/gorilla/mux"
 )
 
@@ -28,45 +28,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{}))
 	slog.SetDefault(logger)
 
-	var repo outbound.LinkRepository
-	var userRepo outbound.UserRepository
-	var closer func() error
-
-	connStr := os.Getenv("DATABASE_URL")
-	switch {
-	case strings.HasPrefix(connStr, "postgres://") || strings.HasPrefix(connStr, "postgresql://"):
-		pgRepo, err := postgres.NewRepository(connStr)
-		if err != nil {
-			slog.Error("postgres init failed", "err", err)
-			os.Exit(1)
-		}
-		repo = pgRepo
-		userRepo = postgres.NewUserRepository(pgRepo.DB())
-		closer = pgRepo.Close
-	case strings.HasPrefix(connStr, "sqlite://"):
-		path := strings.TrimPrefix(connStr, "sqlite://")
-		if path == "" {
-			slog.Error("DATABASE_URL=sqlite:// requires a path (e.g. sqlite:///var/lib/golinks/golinks.db)")
-			os.Exit(1)
-		}
-		sqRepo, err := sqlite.NewRepository(path)
-		if err != nil {
-			slog.Error("sqlite init failed", "path", path, "err", err)
-			os.Exit(1)
-		}
-		repo = sqRepo
-		userRepo = sqlite.NewUserRepository(sqRepo.DB())
-		closer = sqRepo.Close
-	case connStr != "":
-		slog.Error("DATABASE_URL has unsupported scheme; expected postgres://, postgresql://, or sqlite://", "value", connStr)
-		os.Exit(1)
-	default:
-		slog.Info("DATABASE_URL not set; using in-memory repository")
-		memRepo := memory.NewRepository()
-		repo = memRepo
-		userRepo = memRepo
-		closer = memRepo.Close
-	}
+	repo, userRepo, closer := openRepositories(os.Getenv("DATABASE_URL"))
 	defer func() {
 		if closer != nil {
 			_ = closer()
@@ -98,22 +60,66 @@ func main() {
 		}
 	}
 
-	// Explicit timeouts protect against slow-loris / slow-body DoS — the
-	// previous //nolint:gosec http.ListenAndServe left ReadTimeout,
-	// WriteTimeout, IdleTimeout, and ReadHeaderTimeout all at zero, so a
-	// single client could hold a connection open indefinitely.
-	srv := &http.Server{
+	srv := newServer(port, r)
+	runServer(srv)
+}
+
+// openRepositories selects a repository implementation based on the
+// connection string scheme. It returns the link repository, user
+// repository, and a closer function (which may be nil).
+func openRepositories(connStr string) (outbound.LinkRepository, outbound.UserRepository, func() error) {
+	switch {
+	case strings.HasPrefix(connStr, "postgres://") || strings.HasPrefix(connStr, "postgresql://"):
+		pgRepo, err := postgres.NewRepository(connStr)
+		if err != nil {
+			slog.Error("postgres init failed", "err", err)
+			os.Exit(1)
+		}
+		return pgRepo, postgres.NewUserRepository(pgRepo.DB()), pgRepo.Close
+	case strings.HasPrefix(connStr, "sqlite://"):
+		path := strings.TrimPrefix(connStr, "sqlite://")
+		if path == "" {
+			slog.Error("DATABASE_URL=sqlite:// requires a path (e.g. sqlite:///var/lib/golinks/golinks.db)")
+			os.Exit(1)
+		}
+		sqRepo, err := sqlite.NewRepository(path)
+		if err != nil {
+			slog.Error("sqlite init failed", "path", path, "err", err)
+			os.Exit(1)
+		}
+		return sqRepo, sqlite.NewUserRepository(sqRepo.DB()), sqRepo.Close
+	case connStr != "":
+		slog.Error("DATABASE_URL has unsupported scheme; expected postgres://, postgresql://, or sqlite://", "value", connStr)
+		os.Exit(1)
+		return nil, nil, nil // unreachable
+	default:
+		slog.Info("DATABASE_URL not set; using in-memory repository")
+		memRepo := memory.NewRepository()
+		return memRepo, memRepo, memRepo.Close
+	}
+}
+
+// newServer builds an http.Server with explicit timeouts to protect
+// against slow-loris / slow-body DoS — the previous //nolint:gosec
+// http.ListenAndServe left ReadTimeout, WriteTimeout, IdleTimeout, and
+// ReadHeaderTimeout all at zero, so a single client could hold a
+// connection open indefinitely.
+func newServer(port string, handler http.Handler) *http.Server {
+	return &http.Server{
 		Addr:              ":" + port,
-		Handler:           r,
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+}
 
-	// Run the server in a goroutine so we can shut it down gracefully on
-	// SIGINT/SIGTERM. Without this, in-flight requests would be cut off
-	// abruptly on container stop.
+// runServer starts srv in a goroutine and blocks until either the
+// server fails or a SIGINT/SIGTERM signal triggers a graceful shutdown.
+// Without this, in-flight requests would be cut off abruptly on
+// container stop.
+func runServer(srv *http.Server) {
 	errCh := make(chan error, 1)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

@@ -1,6 +1,6 @@
 ---
 title: "Hex migration status"
-status: "In progress"
+status: "Complete"
 created: "2026-05-02"
 updated: "2026-05-02"
 updated_by: "george"
@@ -13,13 +13,15 @@ tags: ["architecture", "hex", "tracking"]
 
 | Rule | Status | Notes |
 |---|---|---|
-| `domain-no-adapters` | Active ✓ | Domain is clean |
-| `adapters-no-cross-import` | Active ✓ | No sibling imports detected |
+| `domain-no-other-internal` | Active ✓ | Domain is clean |
+| `ports-no-impl` | Active ✓ | Ports only import domain |
+| `app-no-adapters` | Active ✓ | App layer depends only on ports |
+| `adapters-no-cross-import` | Active ✓ | No cross-adapter imports |
 
 ## Migration checklist
 
-- [ ] Step 1 — extract `LinkRepository`, `UserRepository`, `LinkService` → `internal/ports/{outbound,inbound}/`
-- [ ] Step 2 — move `linkService` → `internal/app/link_service.go`
-- [ ] Step 3 — rename `adapter/` → `adapters/`
-- [ ] Step 4 — add `FakeLinkRepository` + `FakeUserRepository` to `testdoubles/`
-- [ ] Step 5 — add `app-no-adapters` and `adapters-no-app` depguard rules
+- [x] Step 1 — extract `LinkRepository`, `UserRepository`, `LinkService` → `internal/ports/{outbound,inbound}/`
+- [x] Step 2 — move `linkService` → `internal/app/link_service.go`
+- [x] Step 3 — rename `adapter/` → `adapters/`
+- [x] Step 4 — add `FakeLinkRepository` + `FakeUserRepository` to `testdoubles/`
+- [x] Step 5 — add `app-no-adapters`, `ports-no-impl`, `domain-no-other-internal` depguard rules

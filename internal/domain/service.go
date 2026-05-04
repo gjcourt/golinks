@@ -2,117 +2,64 @@ package domain
 
 import (
 	"errors"
-	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 )
 
 var shortcodeRe = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
-// linkService implements LinkService.
-type linkService struct {
-	repo LinkRepository
-}
-
-// NewLinkService creates a LinkService backed by the given repository.
-func NewLinkService(repo LinkRepository) LinkService {
-	return &linkService{repo: repo}
-}
+// ErrInvalidURL is returned by NormalizeURL when the input cannot be turned
+// into a syntactically valid http(s) URL with a non-empty host.
+var ErrInvalidURL = errors.New("invalid url")
 
 // ValidShortcode checks whether a shortcode is syntactically valid.
 func ValidShortcode(s string) bool {
 	return len(s) >= 1 && len(s) <= 100 && shortcodeRe.MatchString(s)
 }
 
-// NormalizeURL ensures the URL has an http(s) scheme.
-func NormalizeURL(raw string) string {
-	u := strings.TrimSpace(raw)
-	if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
-		u = "https://" + u
+// NormalizeURL ensures the URL parses as an http(s) URL with a non-empty
+// host. If the input lacks a scheme it is treated as https. Inputs that do
+// not parse, that have a non-http(s) scheme, or that resolve to an empty
+// host (e.g. "javascript:alert(1)", "//evil.example.com", schemeless inputs
+// containing only a path) return ErrInvalidURL — preventing the redirect
+// handler from being abused as an open redirector.
+func NormalizeURL(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", ErrInvalidURL
 	}
-	return u
-}
 
-// CreateLink validates inputs and persists a new link owned by owner.
-func (s *linkService) CreateLink(shortcode, url, description, owner string) (*Link, error) {
-	shortcode = strings.TrimSpace(shortcode)
-	if !ValidShortcode(shortcode) {
-		return nil, errors.New("invalid shortcode: use only letters, numbers, hyphens, and underscores")
+	// Reject protocol-relative inputs outright — they parse with an empty
+	// scheme and a host attacker-controlled, which would silently become
+	// "https:////evil.example.com" if we naively prefixed.
+	if strings.HasPrefix(s, "//") {
+		return "", ErrInvalidURL
 	}
-	url = NormalizeURL(url)
-	if strings.TrimSpace(url) == "" || url == "https://" {
-		return nil, errors.New("url is required")
-	}
-	link := &Link{
-		Shortcode:   shortcode,
-		URL:         url,
-		Description: strings.TrimSpace(description),
-		Owner:       owner,
-	}
-	if err := s.repo.CreateLink(link); err != nil {
-		return nil, err
-	}
-	return link, nil
-}
 
-// GetLink retrieves a link by shortcode.
-func (s *linkService) GetLink(shortcode string) (*Link, error) {
-	return s.repo.GetLink(shortcode)
-}
+	// If the input has no scheme, assume https. We detect "no scheme" by
+	// looking for "://" rather than `url.Parse`'s scheme detection because
+	// inputs like "example.com/path" parse with an empty scheme and the
+	// host buried inside Path.
+	if !strings.Contains(s, "://") {
+		s = "https://" + s
+	}
 
-// UpdateLink patches the URL and/or description of an existing link.
-// Only the owner or an admin may update a link.
-func (s *linkService) UpdateLink(shortcode, url, description, username string, isAdmin bool) (*Link, error) {
-	existing, err := s.repo.GetLink(shortcode)
+	u, err := url.Parse(s)
 	if err != nil {
-		return nil, err
+		return "", ErrInvalidURL
 	}
-	if !isAdmin && existing.Owner != username {
-		return nil, fmt.Errorf("%w: only the owner or an admin can update this link", ErrForbidden)
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", ErrInvalidURL
 	}
-	if url != "" {
-		existing.URL = NormalizeURL(url)
+	if u.Host == "" {
+		return "", ErrInvalidURL
 	}
-	if description != "" {
-		existing.Description = strings.TrimSpace(description)
+	// Reject embedded credentials — a common phishing vector
+	// ("http://trusted@evil.com/").
+	if u.User != nil {
+		return "", ErrInvalidURL
 	}
-	if err := s.repo.UpdateLink(shortcode, existing); err != nil {
-		return nil, err
-	}
-	return existing, nil
-}
-
-// DeleteLink removes a link.
-// Only the owner or an admin may delete a link.
-func (s *linkService) DeleteLink(shortcode, username string, isAdmin bool) error {
-	existing, err := s.repo.GetLink(shortcode)
-	if err != nil {
-		return err
-	}
-	if !isAdmin && existing.Owner != username {
-		return fmt.Errorf("%w: only the owner or an admin can delete this link", ErrForbidden)
-	}
-	return s.repo.DeleteLink(shortcode)
-}
-
-// ListLinks returns all links.
-func (s *linkService) ListLinks() ([]*Link, error) {
-	return s.repo.ListLinks()
-}
-
-// RedirectLink fetches a link and asynchronously increments its click count.
-func (s *linkService) RedirectLink(shortcode string) (*Link, error) {
-	link, err := s.repo.GetLink(shortcode)
-	if err != nil {
-		return nil, err
-	}
-	go func() {
-		_ = s.repo.IncrementClickCount(shortcode)
-	}()
-	return link, nil
-}
-
-// GetLinkStats returns click statistics for a link.
-func (s *linkService) GetLinkStats(shortcode string) (*LinkStats, error) {
-	return s.repo.GetStats(shortcode)
+	return u.String(), nil
 }

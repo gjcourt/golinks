@@ -4,11 +4,13 @@ package adapthttp
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/george/golinks/internal/domain"
+	inbound "github.com/george/golinks/internal/ports/inbound"
+	outbound "github.com/george/golinks/internal/ports/outbound"
 	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -73,16 +75,16 @@ func statsToResponse(s *domain.LinkStats) StatsResponse {
 
 // ---------- Handler ----------
 
-// Handler is the driving HTTP adapter. It depends only on domain.LinkService.
+// Handler is the driving HTTP adapter. It depends on inbound.LinkService and outbound.UserRepository.
 type Handler struct {
-	svc   domain.LinkService
+	svc   inbound.LinkService
 	auth  AuthConfig
-	users domain.UserRepository
+	users outbound.UserRepository
 }
 
 // NewHandler creates a Handler wired to the given service, auth config,
 // and user repository.
-func NewHandler(svc domain.LinkService, auth AuthConfig, users domain.UserRepository) *Handler {
+func NewHandler(svc inbound.LinkService, auth AuthConfig, users outbound.UserRepository) *Handler {
 	return &Handler{svc: svc, auth: auth, users: users}
 }
 
@@ -143,7 +145,7 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("error redirecting %q: %v", shortcode, err)
+		slog.Error("redirect failed", "shortcode", shortcode, "err", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -154,7 +156,7 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListLinks(w http.ResponseWriter, r *http.Request) {
 	links, err := h.svc.ListLinks()
 	if err != nil {
-		log.Printf("error listing links: %v", err)
+		slog.Error("list links failed", "err", err)
 		respondError(w, http.StatusInternalServerError, "Failed to list links")
 		return
 	}
@@ -194,7 +196,7 @@ func (h *Handler) GetLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("error getting link %q: %v", shortcode, err)
+		slog.Error("get link failed", "shortcode", shortcode, "err", err)
 		respondError(w, http.StatusInternalServerError, "Failed to get link")
 		return
 	}
@@ -221,7 +223,7 @@ func (h *Handler) UpdateLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("error updating link %q: %v", shortcode, err)
+		slog.Error("update link failed", "shortcode", shortcode, "err", err)
 		respondError(w, http.StatusInternalServerError, "Failed to update link")
 		return
 	}
@@ -243,7 +245,7 @@ func (h *Handler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("error deleting link %q: %v", shortcode, err)
+		slog.Error("delete link failed", "shortcode", shortcode, "err", err)
 		respondError(w, http.StatusInternalServerError, "Failed to delete link")
 		return
 	}
@@ -259,7 +261,7 @@ func (h *Handler) GetLinkStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("error getting stats for %q: %v", shortcode, err)
+		slog.Error("get stats failed", "shortcode", shortcode, "err", err)
 		respondError(w, http.StatusInternalServerError, "Failed to get stats")
 		return
 	}
@@ -371,17 +373,37 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 // RegisterPage serves GET /register.
+//
+// Registration is only exposed when local auth is enabled AND no users yet
+// exist (the bootstrap "create the first admin" flow). Once at least one
+// user is registered, this page redirects to /login — additional users must
+// be created through an authenticated admin flow, not by anonymous visitors.
 func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
 	if h.auth.Mode != AuthModeLocal {
 		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+	n, err := h.users.CountUsers()
+	if err != nil {
+		slog.Error("count users failed", "err", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if n > 0 {
+		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(registerTemplate))
 }
 
-// HandleRegister handles POST /register — creates a new user.
-// The first user created becomes an admin.
+// HandleRegister handles POST /register — creates the first admin user.
+//
+// SECURITY: this endpoint is only valid when no users exist yet. After the
+// first admin is created, anonymous registration is closed; subsequent
+// users must be provisioned by an authenticated admin (a future flow).
+// Without this gate, any visitor on a `local`-mode instance could create
+// themselves a non-admin account and obtain API access.
 func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	if h.auth.Mode != AuthModeLocal {
 		http.Redirect(w, r, "/admin", http.StatusFound)
@@ -389,7 +411,15 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := h.users.CountUsers()
 	if err != nil {
+		slog.Error("count users failed", "err", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if n > 0 {
+		// First admin is already provisioned; refuse silently. Returning
+		// 403 rather than redirecting prevents form replays from
+		// accidentally creating users via CSRF.
+		http.Error(w, "Registration is closed", http.StatusForbidden)
 		return
 	}
 
@@ -406,26 +436,23 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
+		slog.Error("hash password failed", "err", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
-	}
-
-	role := "user"
-	if n == 0 {
-		role = "admin"
 	}
 
 	user := &domain.User{
 		Username:     username,
 		PasswordHash: string(hashed),
-		Role:         role,
+		Role:         "admin",
 	}
 	if err := h.users.CreateUser(user); err != nil {
-		http.Error(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("create user failed", "username", username, "err", err)
+		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("User %q created with role %q", username, role)
+	slog.Info("user created", "username", username, "role", "admin")
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 

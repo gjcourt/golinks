@@ -470,7 +470,7 @@ func (h *Handler) isAdmin(username string) bool {
 	if username == "" {
 		return false
 	}
-	// In proxy mode, the first user or env-configured admin gets admin.
+	// In local/proxy mode, admin is determined by the user's stored role.
 	u, err := h.users.GetUserByUsername(username)
 	if err != nil {
 		return false

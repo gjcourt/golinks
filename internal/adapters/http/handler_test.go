@@ -333,6 +333,11 @@ func TestUpdateLink_NoneMode_ForeignOwner(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (none-mode admin should edit any link)", w.Code, http.StatusOK)
 	}
+	var resp LinkResponse
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp.URL != "https://new.example.com" {
+		t.Errorf("url = %q, want %q (update did not take effect)", resp.URL, "https://new.example.com")
+	}
 }
 
 // TestDeleteLink_NoneMode_ForeignOwner verifies that in none mode a link owned
@@ -349,6 +354,44 @@ func TestDeleteLink_NoneMode_ForeignOwner(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d (none-mode admin should delete any link)", w.Code, http.StatusNoContent)
+	}
+}
+
+// TestIsAdmin_ModeOrdering pins the branch ordering in isAdmin. Moving the
+// AuthModeNone short-circuit above the empty-username guard fixes none mode, but
+// it must NOT leak admin into local/proxy mode: those modes still fall through to
+// the empty-username guard (false) and the role lookup. An empty username in
+// local/proxy must never be admin, and a non-admin user must never be admin.
+func TestIsAdmin_ModeOrdering(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     AuthMode
+		username string
+		role     string // role to seed for username (empty = don't seed)
+		want     bool
+	}{
+		{"none empty username is admin", AuthModeNone, "", "", true},
+		{"none arbitrary username is admin", AuthModeNone, "nobody", "", true},
+		{"local empty username not admin", AuthModeLocal, "", "", false},
+		{"local non-admin user not admin", AuthModeLocal, "alice", "user", false},
+		{"local admin user is admin", AuthModeLocal, "admin", "admin", true},
+		{"proxy empty username not admin", AuthModeProxy, "", "", false},
+		{"proxy non-admin user not admin", AuthModeProxy, "bob", "user", false},
+		{"proxy admin user is admin", AuthModeProxy, "root", "admin", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultAuthConfig()
+			cfg.Mode = tt.mode
+			userRepo := newMockUserRepo()
+			if tt.role != "" {
+				_ = userRepo.CreateUser(&domain.User{Username: tt.username, Role: tt.role})
+			}
+			h := NewHandler(newMockService(), cfg, userRepo)
+			if got := h.isAdmin(tt.username); got != tt.want {
+				t.Errorf("isAdmin(%q) in %s mode = %v, want %v", tt.username, tt.mode, got, tt.want)
+			}
+		})
 	}
 }
 

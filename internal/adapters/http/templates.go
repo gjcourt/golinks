@@ -578,12 +578,12 @@ const adminTemplate = `<!DOCTYPE html>
                 <input type="hidden" id="edit-mode" value="">
                 <div class="form-group">
                     <label for="shortcode">Shortcode</label>
-                    <input type="text" id="shortcode" placeholder="docs" required>
+                    <input type="text" id="shortcode" placeholder="docs — or a wildcard like pulls/*" required>
                     <div class="link-preview" id="preview"></div>
                 </div>
                 <div class="form-group">
                     <label for="url">Destination URL</label>
-                    <input type="text" id="url" placeholder="https://example.com/documentation" required>
+                    <input type="text" id="url" placeholder="https://example.com/documentation (use * for wildcards)" required>
                 </div>
                 <div class="form-group">
                     <label for="description">Description (optional)</label>
@@ -628,15 +628,29 @@ const adminTemplate = `<!DOCTYPE html>
             return s.trim().replace(/^go\//, '').replace(/^\//, '');
         }
 
-        document.getElementById('shortcode').addEventListener('input', function() {
-            const shortcode = normalizeShortcode(this.value);
+        function updatePreview() {
+            const shortcode = normalizeShortcode(document.getElementById('shortcode').value);
+            const url = document.getElementById('url').value.trim();
             const preview = document.getElementById('preview');
-            if (shortcode) {
-                preview.textContent = 'go/' + shortcode + ' → ' + window.location.origin + '/' + shortcode;
-            } else {
+            if (!shortcode) {
                 preview.textContent = '';
+                return;
             }
-        });
+            if (shortcode.includes('*')) {
+                // Wildcard link: show an example resolution. The captured path
+                // segment is substituted for '*' in both shortcode and URL.
+                const example = shortcode.replace('*', '10');
+                const dest = url && url.includes('*')
+                    ? url.replace('*', '10')
+                    : '…/<value>';
+                preview.textContent = 'go/' + shortcode + ' → ' + dest + '  (e.g. go/' + example + ')';
+            } else {
+                preview.textContent = 'go/' + shortcode + ' → ' + window.location.origin + '/' + shortcode;
+            }
+        }
+
+        document.getElementById('shortcode').addEventListener('input', updatePreview);
+        document.getElementById('url').addEventListener('input', updatePreview);
 
         async function loadLinks() {
             try {

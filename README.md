@@ -5,6 +5,7 @@ A self-hosted go links service written in Go. Create short, memorable links like
 ## Features
 
 - 🔗 Create short links (e.g., `go/docs` → `https://docs.google.com/...`)
+- ✳️ Wildcard / parameterized links (e.g., `go/pulls/*` → `https://github.com/org/repo/pull/*`, so `go/pulls/10` resolves the pull request)
 - 📊 Track click statistics
 - 🎨 Clean, modern web UI for managing links
 - 🚀 Fast and lightweight
@@ -92,6 +93,23 @@ curl -X POST http://localhost:8080/api/links \
   -H "Content-Type: application/json" \
   -d '{"shortcode": "docs", "url": "https://docs.example.com", "description": "Documentation"}'
 ```
+
+##### Wildcard (parameterized) links
+
+A shortcode with a single trailing `*` captures one path segment and
+substitutes it into the destination (which must also contain exactly one `*`):
+
+```bash
+curl -X POST http://localhost:8080/api/links \
+  -H "Content-Type: application/json" \
+  -d '{"shortcode": "pulls/*", "url": "https://github.com/gjcourt/homelab/pull/*"}'
+```
+
+Now `go/pulls/10` redirects to `https://github.com/gjcourt/homelab/pull/10`.
+
+- The captured segment is a single path segment — `go/pulls/10/extra` does **not** match.
+- An exact shortcode always wins over a wildcard; among wildcards the longest literal prefix wins.
+- The captured value is restricted to `A–Z a–z 0–9 . _ -` and percent-encoded before substitution, so it cannot change the destination scheme/host or inject another URL. Anything else 404s.
 
 #### Get a link
 

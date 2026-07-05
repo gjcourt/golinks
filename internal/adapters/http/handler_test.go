@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/george/golinks/internal/app"
 	"github.com/george/golinks/internal/domain"
 	inbound "github.com/george/golinks/internal/ports/inbound"
 	"github.com/gorilla/mux"
@@ -417,6 +418,144 @@ func TestRedirect_NotFound(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Wildcard redirect — end-to-end through the real service and router
+// ---------------------------------------------------------------------------
+
+// fakeRepo is a minimal in-file LinkRepository so these tests can drive the
+// real app.linkService (and thus real wildcard resolution) without importing a
+// sibling storage adapter (forbidden by depguard).
+type fakeRepo struct {
+	links map[string]*domain.Link
+}
+
+func newFakeRepo() *fakeRepo { return &fakeRepo{links: make(map[string]*domain.Link)} }
+
+func (f *fakeRepo) CreateLink(l *domain.Link) error {
+	if _, ok := f.links[l.Shortcode]; ok {
+		return domain.ErrAlreadyExists
+	}
+	cp := *l
+	cp.ID = int64(len(f.links) + 1)
+	f.links[l.Shortcode] = &cp
+	return nil
+}
+func (f *fakeRepo) GetLink(sc string) (*domain.Link, error) {
+	l, ok := f.links[sc]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	cp := *l
+	return &cp, nil
+}
+func (f *fakeRepo) UpdateLink(sc string, l *domain.Link) error {
+	if _, ok := f.links[sc]; !ok {
+		return domain.ErrNotFound
+	}
+	cp := *l
+	f.links[sc] = &cp
+	return nil
+}
+func (f *fakeRepo) DeleteLink(sc string) error {
+	if _, ok := f.links[sc]; !ok {
+		return domain.ErrNotFound
+	}
+	delete(f.links, sc)
+	return nil
+}
+func (f *fakeRepo) ListLinks() ([]*domain.Link, error) {
+	out := make([]*domain.Link, 0, len(f.links))
+	for _, l := range f.links {
+		cp := *l
+		out = append(out, &cp)
+	}
+	return out, nil
+}
+func (f *fakeRepo) IncrementClickCount(sc string) error {
+	if l, ok := f.links[sc]; ok {
+		l.ClickCount++
+	}
+	return nil
+}
+func (f *fakeRepo) GetStats(sc string) (*domain.LinkStats, error) {
+	l, ok := f.links[sc]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &domain.LinkStats{Shortcode: sc, ClickCount: l.ClickCount}, nil
+}
+func (f *fakeRepo) Close() error { return nil }
+
+func TestRedirect_Wildcard_EndToEnd(t *testing.T) {
+	repo := newFakeRepo()
+	svc := app.NewLinkService(repo)
+	if _, err := svc.CreateLink("pulls/*", "https://github.com/gjcourt/homelab/pull/*", "", "admin"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	r := mux.NewRouter()
+	NewHandler(svc, DefaultAuthConfig(), newMockUserRepo()).RegisterRoutes(r)
+
+	tests := []struct {
+		name, path string
+		wantCode   int
+		wantLoc    string
+	}{
+		{"resolves", "/pulls/10", http.StatusFound, "https://github.com/gjcourt/homelab/pull/10"},
+		{"multi-segment-404", "/pulls/10/extra", http.StatusNotFound, ""},
+		// A colon (scheme-like) survives path cleaning but fails the capture
+		// charset check in the resolver -> 404, never redirected.
+		{"unsafe-capture-404", "/pulls/a:b", http.StatusNotFound, ""},
+		{"prefix-miss-404", "/issues/10", http.StatusNotFound, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tt.path, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != tt.wantCode {
+				t.Fatalf("status = %d, want %d", w.Code, tt.wantCode)
+			}
+			if tt.wantLoc != "" {
+				if loc := w.Header().Get("Location"); loc != tt.wantLoc {
+					t.Errorf("Location = %q, want %q", loc, tt.wantLoc)
+				}
+			}
+		})
+	}
+}
+
+// TestManageWildcardLink_ViaAPI confirms a wildcard link (shortcode with "/"
+// and "*") is reachable through the slash-tolerant API item routes for
+// stats and delete.
+func TestManageWildcardLink_ViaAPI(t *testing.T) {
+	repo := newFakeRepo()
+	svc := app.NewLinkService(repo)
+	if _, err := svc.CreateLink("pulls/*", "https://example.com/pull/*", "", "admin"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	r := mux.NewRouter()
+	NewHandler(svc, DefaultAuthConfig(), newMockUserRepo()).RegisterRoutes(r)
+
+	// Stats for the pattern shortcode.
+	req := httptest.NewRequest("GET", "/api/links/pulls/*/stats", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("stats status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	// Delete the pattern shortcode.
+	req = httptest.NewRequest("DELETE", "/api/links/pulls/*", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+	if _, err := repo.GetLink("pulls/*"); err != domain.ErrNotFound {
+		t.Errorf("wildcard link not deleted: %v", err)
 	}
 }
 

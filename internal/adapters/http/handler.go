@@ -97,10 +97,14 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	api.Use(authMW)
 	api.HandleFunc("/links", h.ListLinks).Methods("GET")
 	api.HandleFunc("/links", h.CreateLink).Methods("POST")
-	api.HandleFunc("/links/{shortcode}", h.GetLink).Methods("GET")
-	api.HandleFunc("/links/{shortcode}", h.UpdateLink).Methods("PUT")
-	api.HandleFunc("/links/{shortcode}", h.DeleteLink).Methods("DELETE")
-	api.HandleFunc("/links/{shortcode}/stats", h.GetLinkStats).Methods("GET")
+	// {shortcode:.+} allows slashes so wildcard/parameterized links (e.g.
+	// "pulls/*") can be managed by their full pattern. The /stats route is
+	// registered before the bare-item routes so the greedy ".+" does not
+	// swallow the "/stats" suffix.
+	api.HandleFunc("/links/{shortcode:.+}/stats", h.GetLinkStats).Methods("GET")
+	api.HandleFunc("/links/{shortcode:.+}", h.GetLink).Methods("GET")
+	api.HandleFunc("/links/{shortcode:.+}", h.UpdateLink).Methods("PUT")
+	api.HandleFunc("/links/{shortcode:.+}", h.DeleteLink).Methods("DELETE")
 	api.HandleFunc("/me", h.GetMe).Methods("GET")
 
 	// Login / logout / register — always accessible
@@ -115,8 +119,10 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	r.Handle("/admin", adminHandler).Methods("GET")
 	r.Handle("/admin/", adminHandler).Methods("GET")
 
-	// Public routes
-	r.HandleFunc("/{shortcode}", h.Redirect).Methods("GET")
+	// Public routes. {shortcode:.+} captures multi-segment paths so wildcard
+	// links like go/pulls/10 (path "pulls/10") reach the redirect handler;
+	// exact and wildcard resolution is decided in the service layer.
+	r.HandleFunc("/{shortcode:.+}", h.Redirect).Methods("GET")
 	r.HandleFunc("/", h.HomePage).Methods("GET")
 }
 

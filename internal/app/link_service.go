@@ -23,7 +23,7 @@ func NewLinkService(repo outbound.LinkRepository) inbound.LinkService {
 
 // CreateLink validates inputs and persists a new link owned by owner.
 func (s *linkService) CreateLink(shortcode, rawURL, description, owner string) (*domain.Link, error) {
-	shortcode = strings.TrimSpace(shortcode)
+	shortcode = domain.NormalizeShortcode(shortcode)
 	if !domain.ValidShortcode(shortcode) {
 		return nil, errors.New("invalid shortcode: use only letters, numbers, hyphens, and underscores")
 	}

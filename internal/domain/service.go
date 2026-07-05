@@ -18,6 +18,19 @@ func ValidShortcode(s string) bool {
 	return len(s) >= 1 && len(s) <= 100 && shortcodeRe.MatchString(s)
 }
 
+// NormalizeShortcode strips input conveniences before validation: surrounding
+// whitespace, a leading "go/", and a stray leading "/". Users routinely type
+// the shortcode exactly as it's displayed (e.g. "go/ms"); without this that
+// becomes an invalid shortcode (the "/" fails ValidShortcode). Codes that
+// merely start with "go" (e.g. "google") are untouched because the trimmed
+// prefix includes the slash.
+func NormalizeShortcode(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "go/")
+	s = strings.TrimPrefix(s, "/")
+	return s
+}
+
 // NormalizeURL ensures the URL parses as an http(s) URL with a non-empty
 // host. If the input lacks a scheme it is treated as https. Inputs that do
 // not parse, that have a non-http(s) scheme, or that resolve to an empty

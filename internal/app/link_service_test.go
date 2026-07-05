@@ -140,6 +140,17 @@ func TestCreateLink(t *testing.T) {
 	}
 }
 
+func TestCreateLink_NormalizesGoPrefix(t *testing.T) {
+	svc := app.NewLinkService(newMockRepo())
+	link, err := svc.CreateLink("go/ms", "https://grafana.example.com", "MQTT Scope", "alice")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if link.Shortcode != "ms" {
+		t.Errorf("shortcode = %q, want %q (leading go/ should be stripped)", link.Shortcode, "ms")
+	}
+}
+
 func TestCreateLink_Duplicate(t *testing.T) {
 	repo := newMockRepo()
 	svc := app.NewLinkService(repo)

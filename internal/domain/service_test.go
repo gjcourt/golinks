@@ -33,6 +33,29 @@ func TestValidShortcode(t *testing.T) {
 	}
 }
 
+func TestNormalizeShortcode(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, input, want string
+	}{
+		{"bare", "ms", "ms"},
+		{"go-prefix", "go/ms", "ms"},
+		{"leading-slash", "/ms", "ms"},
+		{"whitespace-and-prefix", "  go/ms  ", "ms"},
+		{"go-word-untouched", "google", "google"},
+		{"hyphenated", "go/pulls-10", "pulls-10"},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := NormalizeShortcode(tt.input); got != tt.want {
+				t.Errorf("NormalizeShortcode(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeURL(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

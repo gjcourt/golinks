@@ -624,8 +624,12 @@ const adminTemplate = `<!DOCTYPE html>
             }
         }
 
+        function normalizeShortcode(s) {
+            return s.trim().replace(/^go\//, '').replace(/^\//, '');
+        }
+
         document.getElementById('shortcode').addEventListener('input', function() {
-            const shortcode = this.value.trim();
+            const shortcode = normalizeShortcode(this.value);
             const preview = document.getElementById('preview');
             if (shortcode) {
                 preview.textContent = 'go/' + shortcode + ' → ' + window.location.origin + '/' + shortcode;
@@ -723,7 +727,7 @@ const adminTemplate = `<!DOCTYPE html>
             event.preventDefault();
 
             const editMode = document.getElementById('edit-mode').value;
-            const shortcode = document.getElementById('shortcode').value.trim();
+            const shortcode = normalizeShortcode(document.getElementById('shortcode').value);
             const url = document.getElementById('url').value.trim();
             const description = document.getElementById('description').value.trim();
 

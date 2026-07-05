@@ -291,6 +291,110 @@ func TestDeleteLink_NotFound(t *testing.T) {
 	}
 }
 
+// TestGetMe_NoneMode_IsAdmin verifies that when auth is disabled (the default
+// deployment mode) /api/me reports the caller as an admin. The admin page hides
+// the per-row Edit/Delete controls unless is_admin is true (or the caller owns
+// the link), so a false value here leaves every row's Actions column empty.
+func TestGetMe_NoneMode_IsAdmin(t *testing.T) {
+	r := setupRouter(newMockService()) // DefaultAuthConfig = none
+	req := httptest.NewRequest("GET", "/api/me", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var me struct {
+		Username string `json:"username"`
+		IsAdmin  bool   `json:"is_admin"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&me); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !me.IsAdmin {
+		t.Errorf("is_admin = false in none mode; want true (Edit/Delete controls would be hidden)")
+	}
+}
+
+// TestUpdateLink_NoneMode_ForeignOwner verifies that in none mode a link owned
+// by someone else can still be edited — everyone is effectively an admin, so the
+// ownership check must not forbid the update.
+func TestUpdateLink_NoneMode_ForeignOwner(t *testing.T) {
+	svc := newMockService()
+	svc.links["home"] = &domain.Link{
+		ID: 1, Shortcode: "home", URL: "https://old.example.com",
+		Owner: "someoneelse", CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	r := setupRouter(svc)
+	body, _ := json.Marshal(UpdateLinkRequest{URL: "https://new.example.com"})
+	req := httptest.NewRequest("PUT", "/api/links/home", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (none-mode admin should edit any link)", w.Code, http.StatusOK)
+	}
+	var resp LinkResponse
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp.URL != "https://new.example.com" {
+		t.Errorf("url = %q, want %q (update did not take effect)", resp.URL, "https://new.example.com")
+	}
+}
+
+// TestDeleteLink_NoneMode_ForeignOwner verifies that in none mode a link owned
+// by someone else can still be deleted.
+func TestDeleteLink_NoneMode_ForeignOwner(t *testing.T) {
+	svc := newMockService()
+	svc.links["home"] = &domain.Link{
+		ID: 1, Shortcode: "home", URL: "https://old.example.com",
+		Owner: "someoneelse", CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	r := setupRouter(svc)
+	req := httptest.NewRequest("DELETE", "/api/links/home", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d (none-mode admin should delete any link)", w.Code, http.StatusNoContent)
+	}
+}
+
+// TestIsAdmin_ModeOrdering pins the branch ordering in isAdmin. Moving the
+// AuthModeNone short-circuit above the empty-username guard fixes none mode, but
+// it must NOT leak admin into local/proxy mode: those modes still fall through to
+// the empty-username guard (false) and the role lookup. An empty username in
+// local/proxy must never be admin, and a non-admin user must never be admin.
+func TestIsAdmin_ModeOrdering(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     AuthMode
+		username string
+		role     string // role to seed for username (empty = don't seed)
+		want     bool
+	}{
+		{"none empty username is admin", AuthModeNone, "", "", true},
+		{"none arbitrary username is admin", AuthModeNone, "nobody", "", true},
+		{"local empty username not admin", AuthModeLocal, "", "", false},
+		{"local non-admin user not admin", AuthModeLocal, "alice", "user", false},
+		{"local admin user is admin", AuthModeLocal, "admin", "admin", true},
+		{"proxy empty username not admin", AuthModeProxy, "", "", false},
+		{"proxy non-admin user not admin", AuthModeProxy, "bob", "user", false},
+		{"proxy admin user is admin", AuthModeProxy, "root", "admin", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultAuthConfig()
+			cfg.Mode = tt.mode
+			userRepo := newMockUserRepo()
+			if tt.role != "" {
+				_ = userRepo.CreateUser(&domain.User{Username: tt.username, Role: tt.role})
+			}
+			h := NewHandler(newMockService(), cfg, userRepo)
+			if got := h.isAdmin(tt.username); got != tt.want {
+				t.Errorf("isAdmin(%q) in %s mode = %v, want %v", tt.username, tt.mode, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRedirect_Found(t *testing.T) {
 	svc := newMockService()
 	seedLink(svc, "docs", "https://docs.example.com")

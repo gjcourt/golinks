@@ -458,14 +458,19 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 
 // isAdmin checks whether the given username has the admin role.
 func (h *Handler) isAdmin(username string) bool {
-	if username == "" {
-		return false
-	}
-	// In proxy mode, the first user or env-configured admin gets admin.
-	// In none mode, everyone is effectively admin.
+	// In none mode authentication is disabled and there is never a username,
+	// yet everyone is effectively an admin. This check must come before the
+	// empty-username guard below — otherwise none-mode requests (which always
+	// carry an empty username) would be reported as non-admin, hiding the
+	// Edit/Delete controls on the admin page and causing the API to reject
+	// updates to any link with a non-empty owner as forbidden.
 	if h.auth.Mode == AuthModeNone {
 		return true
 	}
+	if username == "" {
+		return false
+	}
+	// In local/proxy mode, admin is determined by the user's stored role.
 	u, err := h.users.GetUserByUsername(username)
 	if err != nil {
 		return false

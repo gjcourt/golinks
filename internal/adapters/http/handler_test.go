@@ -291,6 +291,67 @@ func TestDeleteLink_NotFound(t *testing.T) {
 	}
 }
 
+// TestGetMe_NoneMode_IsAdmin verifies that when auth is disabled (the default
+// deployment mode) /api/me reports the caller as an admin. The admin page hides
+// the per-row Edit/Delete controls unless is_admin is true (or the caller owns
+// the link), so a false value here leaves every row's Actions column empty.
+func TestGetMe_NoneMode_IsAdmin(t *testing.T) {
+	r := setupRouter(newMockService()) // DefaultAuthConfig = none
+	req := httptest.NewRequest("GET", "/api/me", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var me struct {
+		Username string `json:"username"`
+		IsAdmin  bool   `json:"is_admin"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&me); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !me.IsAdmin {
+		t.Errorf("is_admin = false in none mode; want true (Edit/Delete controls would be hidden)")
+	}
+}
+
+// TestUpdateLink_NoneMode_ForeignOwner verifies that in none mode a link owned
+// by someone else can still be edited — everyone is effectively an admin, so the
+// ownership check must not forbid the update.
+func TestUpdateLink_NoneMode_ForeignOwner(t *testing.T) {
+	svc := newMockService()
+	svc.links["home"] = &domain.Link{
+		ID: 1, Shortcode: "home", URL: "https://old.example.com",
+		Owner: "someoneelse", CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	r := setupRouter(svc)
+	body, _ := json.Marshal(UpdateLinkRequest{URL: "https://new.example.com"})
+	req := httptest.NewRequest("PUT", "/api/links/home", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (none-mode admin should edit any link)", w.Code, http.StatusOK)
+	}
+}
+
+// TestDeleteLink_NoneMode_ForeignOwner verifies that in none mode a link owned
+// by someone else can still be deleted.
+func TestDeleteLink_NoneMode_ForeignOwner(t *testing.T) {
+	svc := newMockService()
+	svc.links["home"] = &domain.Link{
+		ID: 1, Shortcode: "home", URL: "https://old.example.com",
+		Owner: "someoneelse", CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	r := setupRouter(svc)
+	req := httptest.NewRequest("DELETE", "/api/links/home", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d (none-mode admin should delete any link)", w.Code, http.StatusNoContent)
+	}
+}
+
 func TestRedirect_Found(t *testing.T) {
 	svc := newMockService()
 	seedLink(svc, "docs", "https://docs.example.com")

@@ -611,6 +611,13 @@ const adminTemplate = `<!DOCTYPE html>
         document.addEventListener('DOMContentLoaded', async () => {
             await loadCurrentUser();
             loadLinks();
+            // If we arrived here from a missing-link 404 redirect
+            // (/admin?new=<shortcode>), open the create form with the
+            // shortcode pre-filled so the admin can just type the target.
+            const prefill = new URLSearchParams(location.search).get('new');
+            if (prefill) {
+                showCreateModal(prefill);
+            }
         });
 
         async function loadCurrentUser() {
@@ -708,15 +715,23 @@ const adminTemplate = `<!DOCTYPE html>
             ` + "`" + `;
         }
 
-        function showCreateModal() {
+        function showCreateModal(prefillShortcode) {
             document.getElementById('modal-title').textContent = 'Create New Link';
             document.getElementById('edit-mode').value = '';
-            document.getElementById('shortcode').value = '';
+            document.getElementById('shortcode').value = prefillShortcode || '';
             document.getElementById('shortcode').disabled = false;
             document.getElementById('url').value = '';
             document.getElementById('description').value = '';
             document.getElementById('preview').textContent = '';
             document.getElementById('modal').classList.add('active');
+            if (prefillShortcode) {
+                // Shortcode is already known — refresh the preview and drop the
+                // cursor straight into the target URL field.
+                updatePreview();
+                document.getElementById('url').focus();
+            } else {
+                document.getElementById('shortcode').focus();
+            }
         }
 
         function editLink(shortcode) {

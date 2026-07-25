@@ -411,13 +411,34 @@ func TestRedirect_Found(t *testing.T) {
 	}
 }
 
+// TestRedirect_NotFound verifies that an unknown shortcode no longer 404s but
+// instead 302-redirects to the admin create-link page with the missing
+// shortcode pre-filled via the ?new= query param.
 func TestRedirect_NotFound(t *testing.T) {
 	r := setupRouter(newMockService())
 	req := httptest.NewRequest("GET", "/nope", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
+	}
+	if loc := w.Header().Get("Location"); loc != "/admin?new=nope" {
+		t.Errorf("Location = %q, want %q", loc, "/admin?new=nope")
+	}
+}
+
+// TestRedirect_NotFound_WildcardShortcodeEscaped verifies a multi-segment /
+// slash-bearing missing shortcode is query-escaped in the redirect target.
+func TestRedirect_NotFound_WildcardShortcodeEscaped(t *testing.T) {
+	r := setupRouter(newMockService())
+	req := httptest.NewRequest("GET", "/pulls/123", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
+	}
+	if loc := w.Header().Get("Location"); loc != "/admin?new=pulls%2F123" {
+		t.Errorf("Location = %q, want %q", loc, "/admin?new=pulls%2F123")
 	}
 }
 
@@ -504,11 +525,13 @@ func TestRedirect_Wildcard_EndToEnd(t *testing.T) {
 		wantLoc    string
 	}{
 		{"resolves", "/pulls/10", http.StatusFound, "https://github.com/gjcourt/homelab/pull/10"},
-		{"multi-segment-404", "/pulls/10/extra", http.StatusNotFound, ""},
+		// Non-resolving shortcodes no longer 404: they 302 to the admin
+		// create-link page with the (query-escaped) shortcode pre-filled.
+		{"multi-segment-create", "/pulls/10/extra", http.StatusFound, "/admin?new=pulls%2F10%2Fextra"},
 		// A colon (scheme-like) survives path cleaning but fails the capture
-		// charset check in the resolver -> 404, never redirected.
-		{"unsafe-capture-404", "/pulls/a:b", http.StatusNotFound, ""},
-		{"prefix-miss-404", "/issues/10", http.StatusNotFound, ""},
+		// charset check in the resolver -> not resolved, offered for creation.
+		{"unsafe-capture-create", "/pulls/a:b", http.StatusFound, "/admin?new=pulls%2Fa%3Ab"},
+		{"prefix-miss-create", "/issues/10", http.StatusFound, "/admin?new=issues%2F10"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

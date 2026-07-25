@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/george/golinks/internal/domain"
@@ -147,7 +148,14 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 	shortcode := mux.Vars(r)["shortcode"]
 	link, err := h.svc.RedirectLink(shortcode)
 	if err == domain.ErrNotFound {
-		http.NotFound(w, r)
+		// The shortcode does not resolve. Rather than dead-ending on a 404,
+		// send the visitor to the admin create-link page with the missing
+		// shortcode pre-filled, so they land ready to create it. The shortcode
+		// is query-escaped because wildcard links (e.g. "pulls/*") contain
+		// slashes and other characters. Anonymous visitors will be bounced to
+		// /login by the admin auth middleware, which is the intended behavior —
+		// this flow is for the logged-in admin.
+		http.Redirect(w, r, "/admin?new="+url.QueryEscape(shortcode), http.StatusFound)
 		return
 	}
 	if err != nil {

@@ -76,6 +76,24 @@ Self-hosted internal-link redirector. Users create short codes (e.g. `docs`) tha
 
 Deployed in the homelab cluster (`../homelab/apps/base/golinks/`); image-tag bumps must be coordinated with that deployment.
 
+## Container image
+
+`.github/workflows/image.yml` builds and pushes the image to GHCR on every push to `master` (plus manual `workflow_dispatch`). It authenticates with the built-in `GITHUB_TOKEN` — no PAT — and builds multi-arch (`linux/amd64,linux/arm64`). This replaces the old manual `make image` flow.
+
+**Image:** `ghcr.io/gjcourt/golinks`
+
+Each build publishes three tags:
+
+| Tag | Mutability | Use |
+|---|---|---|
+| `YYYY-MM-DD` | mutable — a later same-day build overwrites it | build date (UTC) |
+| `YYYY-MM-DD-<sha7>` | **immutable & unique** | **the tag to pin in deployments** |
+| `latest` | mutable — always the newest build | convenience |
+
+**Deploying:** after a push to `master`, read the exact published tag from the `image.yml` run (or `gh api user/packages/container/golinks/versions`), then pin the `YYYY-MM-DD-<sha7>` tag in `homelab/apps/base/golinks/deployment.yaml`.
+
+**First-build gotcha:** if a `GITHUB_TOKEN` push ever 403s, the GHCR package exists but is unlinked (created by an old manual PAT push) — delete it (`gh api --method DELETE user/packages/container/golinks`, needs the `delete:packages` scope) so the next run recreates it auto-linked, then re-run.
+
 ## Quality gate before push
 
 1. `make lint`

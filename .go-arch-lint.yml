@@ -1,0 +1,69 @@
+version: 3
+
+# Allow every layer to import third-party / stdlib packages. This guard only
+# governs *internal* (cross-component) dependencies — the inward dependency
+# rule of the hexagonal architecture. See docs/architecture/ARCHITECTURE.md.
+allow:
+  depOnAnyVendor: true
+
+# External test packages (e.g. `package app_test`) import their own package
+# under test, which the guard would otherwise flag as a component depending on
+# itself. The dependency rule governs production wiring, so exclude test files.
+excludeFiles:
+  - ".*_test\\.go$"
+
+# Components map 1:1 onto the real package layout. Ports are split into the
+# inbound (driving) and outbound (driven) sides so the guard can enforce that
+# neither side reaches past the domain.
+components:
+  domain:
+    in: internal/domain
+  ports-inbound:
+    in: internal/ports/inbound
+  ports-outbound:
+    in: internal/ports/outbound
+  app:
+    in: internal/app
+  adapters:
+    in: internal/adapters/**
+  testdoubles:
+    in: internal/testdoubles
+  cmd:
+    in: cmd/**
+
+# Inward dependency rule: arrows point toward the domain. A component may only
+# import the components listed under its `mayDependOn`. Anything not listed is
+# a violation. `domain` is intentionally absent — it may import nothing
+# internal (stdlib only).
+deps:
+  ports-inbound:
+    mayDependOn:
+      - domain
+  ports-outbound:
+    mayDependOn:
+      - domain
+  app:
+    mayDependOn:
+      - domain
+      - ports-inbound
+      - ports-outbound
+  adapters:
+    mayDependOn:
+      - domain
+      - ports-inbound
+      - ports-outbound
+      - app
+  testdoubles:
+    mayDependOn:
+      - domain
+      - ports-inbound
+      - ports-outbound
+      - app
+  cmd:
+    mayDependOn:
+      - domain
+      - ports-inbound
+      - ports-outbound
+      - app
+      - adapters
+      - testdoubles

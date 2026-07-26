@@ -35,7 +35,9 @@ internal/adapters/
 internal/testdoubles/ — function-field fakes for outbound ports
 ```
 
-See `docs/architecture/` for the overview.
+See `docs/architecture/ARCHITECTURE.md` for the full architecture (component
+diagram, request flows, ports & adapters map, dependency rule). The inward
+dependency rule is enforced in CI by `go-arch-lint` via `.go-arch-lint.yml`.
 
 ## Conventions
 

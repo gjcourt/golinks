@@ -24,6 +24,21 @@ jobs:
         with:
           version: v2.9.0
 
+  arch:
+    name: arch-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # Use the module's own Go version so `go install` of the guard is
+          # guaranteed compatible. setup-go adds $(go env GOPATH)/bin to PATH.
+          go-version-file: 'go.mod'
+      - name: Install go-arch-lint
+        run: go install github.com/fe3dback/go-arch-lint@v1.16.0
+      - name: Check hexagonal boundaries
+        run: go-arch-lint check
+
   test:
     name: test
     runs-on: ubuntu-latest

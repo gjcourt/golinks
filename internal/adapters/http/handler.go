@@ -16,6 +16,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const roleAdmin = "admin"
+
 // ---------- request/response DTOs (transport concern) ----------
 
 // CreateLinkRequest is the JSON body for POST /api/links.
@@ -163,7 +165,7 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, link.URL, http.StatusFound)
+	http.Redirect(w, r, link.URL, http.StatusFound) //nolint:gosec // G710: target is the admin-configured golink URL (redirecting to it is the app's purpose), not request-controlled
 }
 
 // ListLinks handles GET /api/links.
@@ -361,7 +363,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// Authentication successful — set session cookie.
 	expiry := time.Now().Add(time.Duration(h.auth.CookieMaxAge) * time.Second)
 	value := signSession(username, h.auth.Secret, expiry)
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure set via h.auth.CookieSecure (deploy-configurable); HttpOnly+SameSite present
 		Name:     h.auth.CookieName,
 		Value:    value,
 		Path:     "/",
@@ -376,7 +378,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 // HandleLogout handles POST /logout.
 func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: logout deletion cookie (MaxAge -1); HttpOnly set
 		Name:     h.auth.CookieName,
 		Value:    "",
 		Path:     "/",
@@ -458,7 +460,7 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	user := &domain.User{
 		Username:     username,
 		PasswordHash: string(hashed),
-		Role:         "admin",
+		Role:         roleAdmin,
 	}
 	if err := h.users.CreateUser(user); err != nil {
 		slog.Error("create user failed", "username", username, "err", err)
@@ -466,7 +468,7 @@ func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("user created", "username", username, "role", "admin")
+	slog.Info("user created", "username", username, "role", roleAdmin)
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
@@ -489,5 +491,5 @@ func (h *Handler) isAdmin(username string) bool {
 	if err != nil {
 		return false
 	}
-	return u.Role == "admin"
+	return u.Role == roleAdmin
 }

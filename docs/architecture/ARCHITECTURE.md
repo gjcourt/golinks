@@ -222,14 +222,14 @@ without knowing the backend.
 
 The inward dependency rule is machine-checked by
 [`.go-arch-lint.yml`](../../.go-arch-lint.yml) (config `version: 3`) using
-`github.com/fe3dback/go-arch-lint@v1.16.0`. Components map 1:1 onto the package
+`github.com/fe3dback/go-arch-lint@v1.18.0`. Components map 1:1 onto the package
 layout — `domain`, `ports-inbound`, `ports-outbound`, `app`, `adapters`, `cmd`,
 `testdoubles` — and each component's `mayDependOn` encodes the table above.
 `allow.depOnAnyVendor: true` scopes the guard to *internal* dependencies only
 (third-party/stdlib imports are unrestricted). Run it locally with:
 
 ```bash
-go install github.com/fe3dback/go-arch-lint@v1.16.0
+go install github.com/fe3dback/go-arch-lint@v1.18.0
 go-arch-lint check
 ```
 

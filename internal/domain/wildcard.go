@@ -374,7 +374,14 @@ func sentinelize(s string, params []string) (string, []string, error) {
 	used := map[string]bool{}
 	var placeholders []string
 	unknown := false
+	// A legacy template's only placeholder is "*": any "{…}" in it is
+	// literal text (e.g. JSON in a query string), exactly as SubstituteWildcard
+	// treats it, and isn't checked for stray braces.
+	legacy := want[anonymousParam]
 	out := placeholderRe.ReplaceAllStringFunc(s, func(ph string) string {
+		if legacy && ph != wildcardMarker {
+			return ph
+		}
 		name := anonymousParam
 		if ph != wildcardMarker {
 			name = ph[1 : len(ph)-1]
@@ -385,10 +392,12 @@ func sentinelize(s string, params []string) (string, []string, error) {
 		return urlParamSentinel + sentinelSuffix(len(placeholders)-1)
 	})
 	switch {
-	case unknown, len(used) != len(want), strings.ContainsAny(out, "{}*"):
+	case unknown, len(used) != len(want):
 		return "", nil, ErrInvalidPattern
-	case want[anonymousParam] && len(placeholders) != 1:
+	case legacy && (len(placeholders) != 1 || strings.Contains(out, "*")):
 		return "", nil, ErrInvalidPattern // legacy form: exactly one "*"
+	case !legacy && strings.ContainsAny(out, "{}*"):
+		return "", nil, ErrInvalidPattern // stray brace or "*" in a named template
 	}
 	return out, placeholders, nil
 }

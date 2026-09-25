@@ -115,7 +115,10 @@ func (s *linkService) UpdateLink(shortcode, rawURL, description, username string
 	if !isAdmin && existing.Owner != username {
 		return nil, fmt.Errorf("%w: only the owner or an admin can update this link", domain.ErrForbidden)
 	}
-	if rawURL != "" {
+	// An edit that resends the destination unchanged (the admin UI always
+	// sends it, even for a description-only edit) doesn't re-validate it:
+	// rows accepted by older rules stay editable.
+	if rawURL != "" && rawURL != existing.URL {
 		// A pattern link's destination must keep using its parameters, so it
 		// goes through the same validation as at creation.
 		isPattern := domain.IsWildcardShortcode(existing.Shortcode)

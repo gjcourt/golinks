@@ -570,3 +570,35 @@ func TestRedirectLink_LegacyLiteralBraces(t *testing.T) {
 		t.Errorf("(%v, %v)", link, err)
 	}
 }
+
+// Legacy links may carry JSON in the query: creatable, editable, and they
+// resolve with the JSON left alone.
+func TestLegacyLink_JSONQuery(t *testing.T) {
+	svc := app.NewLinkService(newMockRepo())
+	dest := `https://g.example.com/explore?left={"q":"up"}&id=*`
+	if _, err := svc.CreateLink("logs/*", dest, "", "alice"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := svc.UpdateLink("logs/*", dest, "new description", "alice", false); err != nil {
+		t.Fatalf("description-only edit: %v", err)
+	}
+	link, err := svc.RedirectLink("logs/api")
+	if err != nil || link.URL != `https://g.example.com/explore?left={"q":"up"}&id=api` {
+		t.Errorf("(%v, %v)", link, err)
+	}
+}
+
+// An edit that resends a plain link's destination unchanged succeeds even
+// if the destination wouldn't pass today's create rules (e.g. a '*' in a
+// search query, accepted by older edits).
+func TestUpdateLink_UnchangedURLNotRevalidated(t *testing.T) {
+	repo := newMockRepo()
+	svc := app.NewLinkService(repo)
+	_ = repo.CreateLink(&domain.Link{Shortcode: "g", URL: "https://www.google.com/search?q=foo*", Owner: "alice"})
+	if _, err := svc.UpdateLink("g", "https://www.google.com/search?q=foo*", "search", "alice", false); err != nil {
+		t.Fatalf("description-only edit: %v", err)
+	}
+	if _, err := svc.UpdateLink("g", "https://www.google.com/search?q=bar*", "", "alice", false); err == nil {
+		t.Error("a changed URL is still validated")
+	}
+}

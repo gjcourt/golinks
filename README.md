@@ -5,7 +5,7 @@ A self-hosted go links service written in Go. Create short, memorable links like
 ## Features
 
 - 🔗 Create short links (e.g., `go/docs` → `https://docs.google.com/...`)
-- ✳️ Wildcard / parameterized links (e.g., `go/pulls/*` → `https://github.com/org/repo/pull/*`, so `go/pulls/10` resolves the pull request)
+- ✳️ Parameterized links with named parts (e.g., `go/gh/{repo}/{pr}` → `https://github.com/org/{repo}/pull/{pr}`, so `go/gh/api/10` resolves that pull request); the older single trailing `*` still works
 - 📊 Track click statistics
 - 🎨 Clean, modern web UI for managing links
 - 🚀 Fast and lightweight
@@ -94,22 +94,25 @@ curl -X POST http://localhost:8080/api/links \
   -d '{"shortcode": "docs", "url": "https://docs.example.com", "description": "Documentation"}'
 ```
 
-##### Wildcard (parameterized) links
+##### Parameterized links
 
-A shortcode with a single trailing `*` captures one path segment and
-substitutes it into the destination (which must also contain exactly one `*`):
+Name each part you want to capture with `{name}` — one whole path segment
+each — and use the same names in the destination:
 
 ```bash
 curl -X POST http://localhost:8080/api/links \
   -H "Content-Type: application/json" \
-  -d '{"shortcode": "pulls/*", "url": "https://github.com/gjcourt/homelab/pull/*"}'
+  -d '{"shortcode": "gh/{repo}/{pr}", "url": "https://github.com/intrinsic-org/{repo}/pull/{pr}"}'
 ```
 
-Now `go/pulls/10` redirects to `https://github.com/gjcourt/homelab/pull/10`.
+Now `go/gh/api/10` redirects to `https://github.com/intrinsic-org/api/pull/10`.
 
-- The captured segment is a single path segment — `go/pulls/10/extra` does **not** match.
-- An exact shortcode always wins over a wildcard; among wildcards the longest literal prefix wins.
-- The captured value is restricted to `A–Z a–z 0–9 . _ -` and percent-encoded before substitution, so it cannot change the destination scheme/host or inject another URL. Anything else 404s.
+- Names are lowercase letters, digits and `_`, starting with a letter. Parameters can go in any segment after the first, with literals between them: `gh/{repo}/pull/{n}`.
+- The destination must use every parameter at least once and no others; a parameter may appear more than once (`…/{repo}?from={repo}`). Parameters can't be in the destination's host.
+- A path matches only with exactly as many segments as the pattern — `go/gh/api/10/files` does **not** match `gh/{repo}/{pr}`.
+- An exact shortcode always wins over a pattern. Among patterns, the one with more literal segments wins (`gh/homelab/{pr}` beats `gh/{repo}/{pr}` for `go/gh/homelab/5`).
+- Each captured value is restricted to `A–Z a–z 0–9 . _ -` and percent-encoded before substitution, so it cannot change the destination scheme/host or inject another URL. Anything else 404s.
+- The original form — a single trailing `*` with one `*` in the destination (`pulls/*` → `…/pull/*`) — still works and behaves as one unnamed parameter. For more than one part, use names.
 
 #### Get a link
 

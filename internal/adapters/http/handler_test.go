@@ -803,3 +803,46 @@ func TestAPI_WithAPIKey(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 }
+
+// Named-parameter links end to end: created through the API, resolved by the
+// public route, and managed (stats, delete) through item routes whose path
+// carries the braces percent-encoded, as a browser's fetch sends them.
+func TestNamedParamLink_EndToEnd(t *testing.T) {
+	repo := newFakeRepo()
+	svc := app.NewLinkService(repo)
+	r := mux.NewRouter()
+	NewHandler(svc, DefaultAuthConfig(), newMockUserRepo()).RegisterRoutes(r)
+
+	body := `{"shortcode":"gh/{repo}/{pr}","url":"https://github.com/intrinsic-org/{repo}/pull/{pr}"}`
+	req := httptest.NewRequest("POST", "/api/links", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated && w.Code != http.StatusOK {
+		t.Fatalf("create status = %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest("GET", "/gh/intrinsic/10", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "https://github.com/intrinsic-org/intrinsic/pull/10" {
+		t.Fatalf("redirect = %d %q", w.Code, w.Header().Get("Location"))
+	}
+
+	req = httptest.NewRequest("GET", "/api/links/gh/%7Brepo%7D/%7Bpr%7D/stats", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"click_count":1`) {
+		t.Fatalf("stats = %d %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest("DELETE", "/api/links/gh/%7Brepo%7D/%7Bpr%7D", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d: %s", w.Code, w.Body.String())
+	}
+	if _, err := repo.GetLink("gh/{repo}/{pr}"); err != domain.ErrNotFound {
+		t.Errorf("named link not deleted: %v", err)
+	}
+}

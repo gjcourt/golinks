@@ -162,9 +162,13 @@ without knowing the backend.
    `inbound.LinkService`.
 3. `app.linkService.CreateLink` applies the business rules — all via pure
    `domain` helpers: `domain.NormalizeShortcode`, then `domain.ValidShortcode`
-   or (for `*` codes) `domain.ValidWildcardShortcode`, a wildcard/destination
-   `*`-parity check, and destination normalization through
-   `domain.NormalizeURL` / `domain.NormalizeWildcardURL`.
+   or (for pattern codes — `{name}` segments or the legacy trailing `*`)
+   `domain.ValidWildcardShortcode`, then destination normalization through
+   `domain.NormalizeURL` / `domain.NormalizeWildcardURL`, which for a pattern
+   also checks the destination uses exactly the shortcode's parameters. A
+   plain shortcode with placeholders in its destination is rejected. Updating
+   a link's URL goes through the same check, unless the URL is resent
+   unchanged (the admin UI always resends it).
 4. On success it builds a `domain.Link` and calls
    `s.repo.CreateLink(link)` on the `outbound.LinkRepository` (the wired
    backend). A duplicate shortcode surfaces as `domain.ErrAlreadyExists`.
@@ -181,10 +185,13 @@ without knowing the backend.
      count (`incrementClicks` → `repo.IncrementClickCount`, synchronous, errors
      logged not fatal) and returns the link.
    - **Wildcard fallback:** otherwise it loads `repo.ListLinks()` and calls
-     `domain.ResolveWildcard` (longest-literal-prefix wins, ties broken
-     lexicographically), then `domain.SubstituteWildcard` to inject the
-     percent-escaped captured segment into the destination template. Click
-     count is recorded against the *pattern* link.
+     `domain.ResolveWildcard` (most literal segments wins, then most literal
+     characters, ties broken lexicographically), then
+     `domain.SubstituteWildcard` to inject each percent-escaped captured
+     segment into the destination template, and refuses a result whose scheme
+     or host differs from the template's (so no stored row, however written,
+     can redirect off-site). Click count is recorded against the *pattern*
+     link.
    - No match → `domain.ErrNotFound`.
 3. The handler issues a `302` to `link.URL` on success. On `ErrNotFound` it
    redirects to `/admin?new=<shortcode>` (a create-link affordance for a

@@ -363,8 +363,9 @@ func NormalizeWildcardURL(raw, shortcode string) (string, error) {
 
 // sentinelize swaps each destination placeholder for a distinct plain-ASCII
 // sentinel so the URL can be parsed, and checks the placeholders are exactly
-// params: each used at least once, no others, no stray "{", "}" or "*"; the
-// legacy form allows exactly one "*". It returns the placeholders in order of
+// params: each used at least once and no others. A named template may have no
+// stray "{", "}" or "*"; a legacy one has exactly one "*" and treats braces
+// as literal text. It returns the placeholders in order of
 // appearance, for restoring.
 func sentinelize(s string, params []string) (string, []string, error) {
 	want := map[string]bool{}
@@ -394,7 +395,7 @@ func sentinelize(s string, params []string) (string, []string, error) {
 	switch {
 	case unknown, len(used) != len(want):
 		return "", nil, ErrInvalidPattern
-	case legacy && (len(placeholders) != 1 || strings.Contains(out, "*")):
+	case legacy && len(placeholders) != 1:
 		return "", nil, ErrInvalidPattern // legacy form: exactly one "*"
 	case !legacy && strings.ContainsAny(out, "{}*"):
 		return "", nil, ErrInvalidPattern // stray brace or "*" in a named template

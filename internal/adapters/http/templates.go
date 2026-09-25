@@ -578,12 +578,12 @@ const adminTemplate = `<!DOCTYPE html>
                 <input type="hidden" id="edit-mode" value="">
                 <div class="form-group">
                     <label for="shortcode">Shortcode</label>
-                    <input type="text" id="shortcode" placeholder="docs — or a wildcard like pulls/*" required>
+                    <input type="text" id="shortcode" placeholder="docs — or a pattern like gh/{repo}/{pr}" required>
                     <div class="link-preview" id="preview"></div>
                 </div>
                 <div class="form-group">
                     <label for="url">Destination URL</label>
-                    <input type="text" id="url" placeholder="https://example.com/documentation (use * for wildcards)" required>
+                    <input type="text" id="url" placeholder="https://example.com/documentation — for a pattern, use its {names}: https://github.com/acme/{repo}/pull/{pr}" required>
                 </div>
                 <div class="form-group">
                     <label for="description">Description (optional)</label>
@@ -643,17 +643,59 @@ const adminTemplate = `<!DOCTYPE html>
                 preview.textContent = '';
                 return;
             }
-            if (shortcode.includes('*')) {
-                // Wildcard link: show an example resolution. The captured path
-                // segment is substituted for '*' in both shortcode and URL.
-                const example = shortcode.replace('*', '10');
-                const dest = url && url.includes('*')
-                    ? url.replace('*', '10')
-                    : '…/<value>';
-                preview.textContent = 'go/' + shortcode + ' → ' + dest + '  (e.g. go/' + example + ')';
+            const params = patternParams(shortcode);
+            if (params.length) {
+                // Pattern link: show an example resolution, with each
+                // parameter filled in the same way in shortcode and URL.
+                const sample = {};
+                params.forEach((p, i) => { sample[p] = exampleValue(p, i); });
+                const fill = (s) => s.replace(/\{([a-z][a-z0-9_]*)\}|\*/g,
+                    (m, name) => (name ? (name in sample ? sample[name] : m) : (sample['*'] || m)));
+                const used = url ? destinationParams(url) : [];
+                const missing = params.filter((p) => !used.includes(p));
+                const unknown = used.filter((p) => !params.includes(p));
+                let dest;
+                if (!url) {
+                    dest = '…/' + params.map((p) => (p === '*' ? '*' : '{' + p + '}')).join('/');
+                } else if (missing.length || unknown.length) {
+                    dest = fill(url) + '  ⚠ the URL must use ' +
+                        params.map((p) => (p === '*' ? '*' : '{' + p + '}')).join(', ') + ' — and nothing else';
+                } else {
+                    dest = fill(url);
+                }
+                preview.textContent = 'go/' + shortcode + ' → ' + url + '  (e.g. go/' + fill(shortcode) + ' → ' + dest + ')';
             } else {
                 preview.textContent = 'go/' + shortcode + ' → ' + window.location.origin + '/' + shortcode;
             }
+        }
+
+        // patternParams returns a shortcode's parameters: each {name} segment,
+        // or '*' for the legacy single trailing wildcard. Mirrors the server's
+        // rules loosely — the server has the final say.
+        function patternParams(shortcode) {
+            const names = [];
+            shortcode.split('/').forEach((seg) => {
+                const m = seg.match(/^\{([a-z][a-z0-9_]*)\}$/);
+                if (m) names.push(m[1]);
+                else if (seg === '*') names.push('*');
+            });
+            return names;
+        }
+
+        // destinationParams returns the placeholders a destination URL uses.
+        function destinationParams(url) {
+            const names = [];
+            for (const m of url.matchAll(/\{([a-z][a-z0-9_]*)\}|\*/g)) {
+                const n = m[1] || '*';
+                if (!names.includes(n)) names.push(n);
+            }
+            return names;
+        }
+
+        // exampleValue picks a readable sample for a parameter in the preview.
+        function exampleValue(name, i) {
+            if (name === '*' || /^(n|id|num|number|pr|issue|ticket|bug|page)$/.test(name)) return String(10 + i);
+            return name.replace(/_/g, '-');
         }
 
         document.getElementById('shortcode').addEventListener('input', updatePreview);

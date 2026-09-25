@@ -23,15 +23,16 @@ func NewLinkService(repo outbound.LinkRepository) inbound.LinkService {
 
 // CreateLink validates inputs and persists a new link owned by owner.
 //
-// A shortcode containing "*" is a wildcard/parameterized link: it must be a
-// valid wildcard pattern (e.g. "pulls/*") and its destination must contain a
-// matching "*". A "*" on one side but not the other is rejected as a mismatch.
+// A shortcode with "{name}" segments (or the legacy trailing "*") is a
+// pattern link: it must be a valid pattern (e.g. "gh/{repo}/{pr}" or
+// "pulls/*") and its destination must use exactly its parameters. Pattern
+// syntax on one side but not the other is rejected.
 func (s *linkService) CreateLink(shortcode, rawURL, description, owner string) (*domain.Link, error) {
 	shortcode = domain.NormalizeShortcode(shortcode)
-	isWildcard := domain.IsWildcardShortcode(shortcode)
-	if isWildcard {
+	isPattern := domain.IsWildcardShortcode(shortcode)
+	if isPattern {
 		if !domain.ValidWildcardShortcode(shortcode) {
-			return nil, errors.New("invalid wildcard shortcode: use letters, numbers, hyphens, and underscores in each segment with a single trailing '*' (e.g. pulls/*)")
+			return nil, errors.New(invalidPatternMsg)
 		}
 	} else if !domain.ValidShortcode(shortcode) {
 		return nil, errors.New("invalid shortcode: use only letters, numbers, hyphens, and underscores")
@@ -39,10 +40,10 @@ func (s *linkService) CreateLink(shortcode, rawURL, description, owner string) (
 	if strings.TrimSpace(rawURL) == "" {
 		return nil, errors.New("url is required")
 	}
-	if isWildcard != strings.Contains(rawURL, "*") {
-		return nil, errors.New("wildcard mismatch: a '*' shortcode requires exactly one '*' in the destination, and vice-versa")
+	if !isPattern && hasPlaceholder(rawURL) {
+		return nil, errors.New("the destination has {parameters} or '*' but the shortcode has none — add them to the shortcode, e.g. gh/{repo}/{pr}")
 	}
-	normalized, err := s.normalizeDestination(rawURL, isWildcard)
+	normalized, err := s.normalizeDestination(rawURL, shortcode, isPattern)
 	if err != nil {
 		return nil, err
 	}
@@ -58,13 +59,25 @@ func (s *linkService) CreateLink(shortcode, rawURL, description, owner string) (
 	return link, nil
 }
 
-// normalizeDestination validates and normalizes a destination URL, using the
-// wildcard-aware path when the link is parameterized.
-func (s *linkService) normalizeDestination(rawURL string, isWildcard bool) (string, error) {
-	if isWildcard {
-		normalized, err := domain.NormalizeWildcardURL(rawURL)
+const invalidPatternMsg = "invalid pattern shortcode: start with a plain segment, then use {name} segments " +
+	"(lowercase letters, digits, _) for each part to capture, e.g. gh/{repo}/{pr} — " +
+	"or a single trailing '*', e.g. pulls/*"
+
+// hasPlaceholder reports whether a destination contains pattern syntax —
+// a "{name}" or the legacy "*".
+func hasPlaceholder(rawURL string) bool {
+	return domain.IsWildcardShortcode(rawURL)
+}
+
+// normalizeDestination validates and normalizes a destination URL; for a
+// pattern link it must use exactly the shortcode's parameters.
+func (s *linkService) normalizeDestination(rawURL, shortcode string, isPattern bool) (string, error) {
+	if isPattern {
+		normalized, err := domain.NormalizeWildcardURL(rawURL, shortcode)
 		if err != nil {
-			return "", fmt.Errorf("invalid wildcard url: destination must be a valid http(s) URL with exactly one '*' in the path (not the host), e.g. https://example.com/pull/*")
+			params, _ := domain.PatternParams(shortcode)
+			return "", fmt.Errorf("invalid pattern url: destination must be a valid http(s) URL that uses %s "+
+				"in its path or query (not the host), e.g. https://github.com/acme/{repo}/pull/{pr}", describeParams(params))
 		}
 		return normalized, nil
 	}
@@ -73,6 +86,18 @@ func (s *linkService) normalizeDestination(rawURL string, isWildcard bool) (stri
 		return "", fmt.Errorf("invalid url: must be a valid http or https URL")
 	}
 	return normalized, nil
+}
+
+// describeParams renders a shortcode's parameters for an error message.
+func describeParams(params []string) string {
+	if len(params) == 1 && params[0] == "*" {
+		return "exactly one '*'"
+	}
+	parts := make([]string, len(params))
+	for i, p := range params {
+		parts[i] = "{" + p + "}"
+	}
+	return "each of " + strings.Join(parts, ", ") + " (and no others)"
 }
 
 // GetLink retrieves a link by shortcode.
@@ -90,9 +115,15 @@ func (s *linkService) UpdateLink(shortcode, rawURL, description, username string
 		return nil, fmt.Errorf("%w: only the owner or an admin can update this link", domain.ErrForbidden)
 	}
 	if rawURL != "" {
-		normalized, err := domain.NormalizeURL(rawURL)
+		// A pattern link's destination must keep using its parameters, so it
+		// goes through the same validation as at creation.
+		isPattern := domain.IsWildcardShortcode(existing.Shortcode)
+		if !isPattern && hasPlaceholder(rawURL) {
+			return nil, errors.New("the destination has {parameters} or '*' but this link's shortcode has none")
+		}
+		normalized, err := s.normalizeDestination(rawURL, existing.Shortcode, isPattern)
 		if err != nil {
-			return nil, fmt.Errorf("invalid url: must be a valid http or https URL")
+			return nil, err
 		}
 		existing.URL = normalized
 	}
@@ -129,13 +160,13 @@ func (s *linkService) ListLinks() ([]*domain.Link, error) {
 // in-flight increments are not silently lost on shutdown. Latency cost is
 // a single UPDATE on the same connection that already served the GET.
 // Resolution order: an exact shortcode match always wins. Only when there is
-// no exact (non-pattern) match do we fall back to wildcard links, capturing a
-// single path segment and substituting it into the destination. Click counts
-// for wildcard hits are recorded against the pattern link.
+// no exact (non-pattern) match do we fall back to pattern links, capturing
+// each parameter's path segment and substituting it into the destination.
+// Click counts for pattern hits are recorded against the pattern link.
 func (s *linkService) RedirectLink(shortcode string) (*domain.Link, error) {
-	// 1. Exact match. A stored pattern link ("pulls/*") visited by its literal
-	//    text must NOT resolve as exact — fall through to wildcard handling
-	//    (which will reject the "*" capture and 404).
+	// 1. Exact match. A stored pattern link ("pulls/*", "gh/{repo}") visited
+	//    by its literal text must NOT resolve as exact — fall through to
+	//    pattern handling (which rejects the "*"/"{…}" capture and 404s).
 	link, err := s.repo.GetLink(shortcode)
 	switch {
 	case err == nil && !domain.IsWildcardShortcode(link.Shortcode):
@@ -145,16 +176,16 @@ func (s *linkService) RedirectLink(shortcode string) (*domain.Link, error) {
 		return nil, err
 	}
 
-	// 2. Wildcard fallback.
+	// 2. Pattern fallback.
 	links, err := s.repo.ListLinks()
 	if err != nil {
 		return nil, err
 	}
-	match, capture, ok := domain.ResolveWildcard(links, shortcode)
+	match, captures, ok := domain.ResolveWildcard(links, shortcode)
 	if !ok {
 		return nil, domain.ErrNotFound
 	}
-	finalURL, err := domain.SubstituteWildcard(match.URL, capture)
+	finalURL, err := domain.SubstituteWildcard(match.URL, captures)
 	if err != nil {
 		// Capture failed the safe-charset check — treat as a miss, never
 		// redirect to a half-substituted or unsafe target.

@@ -302,12 +302,21 @@ func TestCreateLink_Wildcard(t *testing.T) {
 		{"valid-pair", "pulls/*", "https://github.com/gjcourt/homelab/pull/*", "pulls/*", ""},
 		{"normalizes-go-prefix", "go/pulls/*", "https://example.com/pull/*", "pulls/*", ""},
 		{"no-scheme-dest", "jira/*", "jira.example.com/browse/*", "jira/*", ""},
-		{"shortcode-star-dest-none", "pulls/*", "https://example.com/pull/x", "", "wildcard mismatch"},
-		{"dest-star-shortcode-none", "pulls", "https://example.com/pull/*", "", "wildcard mismatch"},
-		{"two-stars-shortcode", "a/*/*", "https://example.com/*", "", "invalid wildcard shortcode"},
-		{"bare-star-shortcode", "*", "https://example.com/*", "", "invalid wildcard shortcode"},
-		{"star-in-host", "h/*", "https://*.example.com/x", "", "invalid wildcard url"},
-		{"two-stars-dest", "p/*", "https://example.com/*/*", "", "invalid wildcard url"},
+		{"shortcode-star-dest-none", "pulls/*", "https://example.com/pull/x", "", "invalid pattern url"},
+		{"dest-star-shortcode-none", "pulls", "https://example.com/pull/*", "", "shortcode has none"},
+		{"two-stars-shortcode", "a/*/*", "https://example.com/*", "", "invalid pattern shortcode"},
+		{"bare-star-shortcode", "*", "https://example.com/*", "", "invalid pattern shortcode"},
+		{"star-in-host", "h/*", "https://*.example.com/x", "", "invalid pattern url"},
+		{"two-stars-dest", "p/*", "https://example.com/*/*", "", "invalid pattern url"},
+
+		// Named parameters.
+		{"named-pair", "gh/{repo}/{pr}", "https://github.com/intrinsic-org/{repo}/pull/{pr}", "gh/{repo}/{pr}", ""},
+		{"named-go-prefix", "go/gh/{repo}/{pr}", "https://github.com/acme/{repo}/pull/{pr}", "gh/{repo}/{pr}", ""},
+		{"named-dest-missing-param", "gh/{repo}/{pr}", "https://github.com/acme/{repo}", "", "each of {repo}, {pr}"},
+		{"named-dest-unknown-param", "gh/{repo}", "https://github.com/acme/{repo}/{pr}", "", "invalid pattern url"},
+		{"named-dest-params-shortcode-none", "gh", "https://github.com/acme/{repo}", "", "shortcode has none"},
+		{"named-param-in-host", "o/{org}", "https://{org}.example.com/", "", "invalid pattern url"},
+		{"named-first-segment", "{repo}/x", "https://example.com/{repo}", "", "invalid pattern shortcode"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -439,5 +448,77 @@ func TestRedirectLink_UnsafeCaptureNeverInjected(t *testing.T) {
 		if err != domain.ErrNotFound {
 			t.Errorf("path %q: err = %v, want ErrNotFound", path, err)
 		}
+	}
+}
+
+// Named parameters resolve end to end, and a more specific pattern wins.
+func TestRedirectLink_NamedParams(t *testing.T) {
+	repo := newMockRepo()
+	svc := app.NewLinkService(repo)
+	if _, err := svc.CreateLink("gh/{repo}/{pr}", "https://github.com/intrinsic-org/{repo}/pull/{pr}", "", "alice"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := svc.CreateLink("gh/homelab/{pr}", "https://github.com/gjcourt/homelab/pull/{pr}", "", "alice"); err != nil {
+		t.Fatalf("create specific: %v", err)
+	}
+	tests := []struct {
+		path, wantURL string
+		wantErr       error
+	}{
+		{"gh/intrinsic/10", "https://github.com/intrinsic-org/intrinsic/pull/10", nil},
+		{"gh/homelab/7", "https://github.com/gjcourt/homelab/pull/7", nil},
+		{"gh/intrinsic", "", domain.ErrNotFound},
+		{"gh/intrinsic/10/files", "", domain.ErrNotFound},
+		{"gh/..%2f/10", "", domain.ErrNotFound},
+	}
+	for _, tt := range tests {
+		link, err := svc.RedirectLink(tt.path)
+		if tt.wantErr != nil {
+			if err != tt.wantErr {
+				t.Errorf("%s: err = %v, want %v", tt.path, err, tt.wantErr)
+			}
+			continue
+		}
+		if err != nil || link.URL != tt.wantURL {
+			t.Errorf("%s: (%v, %v), want %q", tt.path, link, err, tt.wantURL)
+		}
+	}
+	stats, err := svc.GetLinkStats("gh/{repo}/{pr}")
+	if err != nil || stats.ClickCount != 1 {
+		t.Errorf("clicks on the generic pattern = %v (%v), want 1", stats, err)
+	}
+}
+
+// Editing a pattern link's destination goes through pattern validation (it
+// used to go through plain URL validation, which can't accept placeholders).
+func TestUpdateLink_PatternDestination(t *testing.T) {
+	repo := newMockRepo()
+	svc := app.NewLinkService(repo)
+	if _, err := svc.CreateLink("gh/{repo}/{pr}", "https://github.com/a/{repo}/pull/{pr}", "", "alice"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := svc.CreateLink("pulls/*", "https://example.com/pull/*", "", "alice"); err != nil {
+		t.Fatalf("create legacy: %v", err)
+	}
+	if _, err := svc.CreateLink("docs", "https://example.com/docs", "", "alice"); err != nil {
+		t.Fatalf("create plain: %v", err)
+	}
+	if l, err := svc.UpdateLink("gh/{repo}/{pr}", "https://github.com/b/{repo}/pull/{pr}", "", "alice", false); err != nil || l.URL != "https://github.com/b/{repo}/pull/{pr}" {
+		t.Errorf("named update: %v %v", l, err)
+	}
+	if l, err := svc.UpdateLink("pulls/*", "https://example.com/pr/*", "", "alice", false); err != nil || l.URL != "https://example.com/pr/*" {
+		t.Errorf("legacy update: %v %v", l, err)
+	}
+	for sc, bad := range map[string]string{
+		"gh/{repo}/{pr}": "https://github.com/b/{repo}", // drops {pr}
+		"pulls/*":        "https://example.com/pr/x",    // drops *
+		"docs":           "https://example.com/{x}",     // placeholder on a plain link
+	} {
+		if _, err := svc.UpdateLink(sc, bad, "", "alice", false); err == nil {
+			t.Errorf("update %s -> %s: want error", sc, bad)
+		}
+	}
+	if l, _ := svc.GetLink("gh/{repo}/{pr}"); l.URL != "https://github.com/b/{repo}/pull/{pr}" {
+		t.Errorf("a rejected update must not change the link: %q", l.URL)
 	}
 }

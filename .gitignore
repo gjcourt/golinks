@@ -1,3 +1,4 @@
 golinks.db
 /golinks
 .worktrees/
+.gstack/

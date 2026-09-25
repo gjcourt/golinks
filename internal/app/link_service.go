@@ -63,10 +63,11 @@ const invalidPatternMsg = "invalid pattern shortcode: start with a plain segment
 	"(lowercase letters, digits, _) for each part to capture, e.g. gh/{repo}/{pr} — " +
 	"or a single trailing '*', e.g. pulls/*"
 
-// hasPlaceholder reports whether a destination contains pattern syntax —
-// a "{name}" or the legacy "*".
+// hasPlaceholder reports whether a destination contains pattern syntax — a
+// "{name}" or the legacy "*". Braces that aren't placeholders (JSON in a
+// query string) are fine in a plain link.
 func hasPlaceholder(rawURL string) bool {
-	return domain.IsWildcardShortcode(rawURL)
+	return domain.HasPlaceholder(rawURL)
 }
 
 // normalizeDestination validates and normalizes a destination URL; for a

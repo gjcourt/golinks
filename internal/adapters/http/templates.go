@@ -647,7 +647,7 @@ const adminTemplate = `<!DOCTYPE html>
             if (params.length) {
                 // Pattern link: show an example resolution, with each
                 // parameter filled in the same way in shortcode and URL.
-                const sample = {};
+                const sample = Object.create(null); // no inherited keys ({constructor})
                 params.forEach((p, i) => { sample[p] = exampleValue(p, i); });
                 const fill = (s) => s.replace(/\{([a-z][a-z0-9_]*)\}|\*/g,
                     (m, name) => (name ? (name in sample ? sample[name] : m) : (sample['*'] || m)));

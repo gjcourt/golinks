@@ -260,29 +260,73 @@ func ResolveWildcard(links []*Link, path string) (match *Link, captures map[stri
 // the URL unreserved set, escaping is effectively identity but guarantees the
 // value stays confined to one path segment. A placeholder with no capture is
 // an error — never redirect to a half-substituted target.
+//
+// A legacy "*" template substitutes only its "*": a literal "{…}" it carries
+// (e.g. in a query string) is left alone, as before named parameters.
+//
+// The result must keep the template's scheme and host: the host is checked
+// here, at every redirect, so a template that somehow lets a capture reach
+// the host (a row written before creation-time validation, or directly to
+// the store) is refused rather than turned into an open redirect.
 func SubstituteWildcard(template string, captures map[string]string) (string, error) {
 	for _, v := range captures {
 		if !validCapture(v) {
 			return "", ErrInvalidCapture
 		}
 	}
-	var missing bool
-	out := placeholderRe.ReplaceAllStringFunc(template, func(ph string) string {
-		name := anonymousParam
-		if ph != wildcardMarker {
-			name = ph[1 : len(ph)-1]
-		}
+	_, legacy := captures[anonymousParam]
+	missing := false
+	fill := func(value func(name string) (string, bool)) string {
+		return placeholderRe.ReplaceAllStringFunc(template, func(ph string) string {
+			if legacy != (ph == wildcardMarker) {
+				return ph // the other form's syntax: literal text
+			}
+			name := anonymousParam
+			if !legacy {
+				name = ph[1 : len(ph)-1]
+			}
+			v, ok := value(name)
+			if !ok {
+				missing = true
+				return ph
+			}
+			return v
+		})
+	}
+	out := fill(func(name string) (string, bool) {
 		v, ok := captures[name]
-		if !ok {
-			missing = true
-			return ph
-		}
-		return url.PathEscape(v)
+		return url.PathEscape(v), ok
 	})
 	if missing {
 		return "", ErrInvalidCapture
 	}
+	// The same template with every placeholder set to a fixed, harmless
+	// value shows where the host really is.
+	probe := fill(func(string) (string, bool) { return "x", true })
+	if !sameOrigin(out, probe) {
+		return "", ErrInvalidCapture
+	}
 	return out, nil
+}
+
+// sameOrigin reports whether a and b parse as http(s) URLs with the same
+// scheme and a non-empty, equal host (port included).
+func sameOrigin(a, b string) bool {
+	ua, errA := url.Parse(a)
+	ub, errB := url.Parse(b)
+	if errA != nil || errB != nil || ua.Host == "" || ua.User != nil || ub.User != nil {
+		return false
+	}
+	scheme := strings.ToLower(ua.Scheme)
+	return (scheme == "http" || scheme == "https") &&
+		strings.EqualFold(ua.Scheme, ub.Scheme) && strings.EqualFold(ua.Host, ub.Host)
+}
+
+// HasPlaceholder reports whether a destination contains pattern syntax — a
+// "{name}" or the legacy "*". Other braces (e.g. JSON in a query string, as
+// Grafana and Kibana links carry) are not placeholders.
+func HasPlaceholder(dest string) bool {
+	return placeholderRe.MatchString(dest)
 }
 
 // NormalizeWildcardURL validates and normalizes a destination template for
@@ -368,9 +412,10 @@ func checkSentinels(normalized string, n int) error {
 }
 
 // sentinelSuffix returns a fixed-width, letters-only suffix for the i-th
-// placeholder: every sentinel is distinct, none is a prefix of another, and
-// all survive URL normalization unchanged. Destinations are length-limited
-// far below the 26^3 placeholders this can number.
+// placeholder: every sentinel is distinct and none is a prefix of another, so
+// all survive URL normalization unchanged and restore unambiguously. (Past
+// 26^3 placeholders suffixes repeat; restoring replaces the first occurrence
+// in order, so the result is still correct.)
 func sentinelSuffix(i int) string {
 	return string([]rune{rune('a' + i/676%26), rune('a' + i/26%26), rune('a' + i%26)})
 }

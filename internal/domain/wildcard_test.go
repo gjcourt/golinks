@@ -188,6 +188,14 @@ func TestSubstituteWildcard(t *testing.T) {
 		{"unsafe-colon", "https://example.com/{a}", map[string]string{"a": "http:"}, "", true},
 		{"empty-capture", "https://example.com/*", map[string]string{"*": ""}, "", true},
 		{"missing-capture", "https://example.com/{a}/{b}", map[string]string{"a": "x"}, "", true},
+		// A legacy template leaves literal {…} alone (e.g. in a query string).
+		{"legacy-literal-braces", "https://ex.com/search?t={type}&q=*", map[string]string{"*": "go"}, "https://ex.com/search?t={type}&q=go", false},
+		// A template letting a capture reach the host is refused at redirect
+		// time, however it was stored.
+		{"host-from-capture-legacy", "https://*/", map[string]string{"*": "evil.com"}, "", true},
+		{"host-from-capture-named", "https://{h}/x", map[string]string{"h": "evil.com"}, "", true},
+		{"host-suffix-from-capture", "https://ex*/", map[string]string{"*": "ample.evil.com"}, "", true},
+		{"userinfo-from-capture", "https://*@good.com/", map[string]string{"*": "evil.com"}, "", true},
 	}
 	for _, tt := range tests {
 		tt := tt
@@ -240,6 +248,11 @@ func TestNormalizeWildcardURL(t *testing.T) {
 		{"uppercase-placeholder", "x/{a}", "https://example.com/{A}", "", true},
 		{"legacy-named-placeholder", "pulls/*", "https://example.com/{a}", "", true},
 		{"sentinel-injection", "x/{a}", "https://example.com/golinksparamsentinelaaa/{a}", "", true},
+		{"named-in-userinfo", "x/{a}", "https://{a}@evil.com/", "", true},
+		{"named-in-port", "x/{a}", "https://example.com:{a}/", "", true},
+		{"named-http-host", "x/{a}", "http://{a}", "", true},
+		{"named-schemeless-host", "x/{a}", "//{a}", "", true},
+		{"named-host-suffix", "x/{a}", "https://example.com{a}/", "", true},
 		{"bad-shortcode", "gh/*/*", "https://example.com/*/*", "", true},
 	}
 	for _, tt := range tests {
@@ -278,5 +291,21 @@ func TestNamedPattern_GitHubPR(t *testing.T) {
 	got, err := SubstituteWildcard(m.URL, caps)
 	if err != nil || got != "https://github.com/intrinsic-org/intrinsic/pull/10" {
 		t.Errorf("got %q, %v", got, err)
+	}
+}
+
+func TestHasPlaceholder(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]bool{
+		"https://ex.com/{a}":                           true,
+		"https://ex.com/*":                             true,
+		`https://grafana.ex/explore?left={"q":1}`:      false,
+		"https://ex.com/{A}":                           false,
+		"https://ex.com/plain":                         false,
+		`https://kibana.ex/app#/?_g=(time:(from:now))`: false,
+	} {
+		if got := HasPlaceholder(in); got != want {
+			t.Errorf("HasPlaceholder(%q) = %v, want %v", in, got, want)
+		}
 	}
 }

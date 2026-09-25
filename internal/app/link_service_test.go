@@ -522,3 +522,51 @@ func TestUpdateLink_PatternDestination(t *testing.T) {
 		t.Errorf("a rejected update must not change the link: %q", l.URL)
 	}
 }
+
+// Plain links may carry braces that aren't placeholders — JSON in a query
+// string, as Grafana and Kibana links do — on create and update.
+func TestPlainLink_BracesAllowed(t *testing.T) {
+	svc := app.NewLinkService(newMockRepo())
+	grafana := `https://grafana.example.com/explore?left={"q":1}`
+	if _, err := svc.CreateLink("dash", grafana, "", "alice"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := svc.UpdateLink("dash", `https://grafana.example.com/explore?left={"q":2}`, "", "alice", false); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if _, err := svc.CreateLink("dash2", "https://example.com/{x}", "", "alice"); err == nil {
+		t.Error("a real placeholder on a plain link must still be rejected")
+	}
+}
+
+// Security regression: master's UpdateLink stored a pattern destination
+// through plain URL validation, so a row like pulls/* -> https://*/ could
+// exist, and go/pulls/evil.com would redirect to evil.com. Whatever wrote
+// the row, it must not redirect off the template's host.
+func TestRedirectLink_StoredHostPlaceholderRefused(t *testing.T) {
+	repo := newMockRepo()
+	svc := app.NewLinkService(repo)
+	for sc, dest := range map[string]string{
+		"pulls/*":   "https://*/",
+		"go-to/{h}": "https://{h}/x",
+		"sfx/*":     "https://ex*/",
+	} {
+		_ = repo.CreateLink(&domain.Link{Shortcode: sc, URL: dest})
+	}
+	for _, path := range []string{"pulls/evil.com", "go-to/evil.com", "sfx/ample.evil.com"} {
+		if link, err := svc.RedirectLink(path); err != domain.ErrNotFound {
+			t.Errorf("%s: (%v, %v), want ErrNotFound", path, link, err)
+		}
+	}
+}
+
+// A legacy link whose stored destination has a literal {…} still resolves.
+func TestRedirectLink_LegacyLiteralBraces(t *testing.T) {
+	repo := newMockRepo()
+	svc := app.NewLinkService(repo)
+	_ = repo.CreateLink(&domain.Link{Shortcode: "s/*", URL: "https://ex.com/search?t={type}&q=*"})
+	link, err := svc.RedirectLink("s/go")
+	if err != nil || link.URL != "https://ex.com/search?t={type}&q=go" {
+		t.Errorf("(%v, %v)", link, err)
+	}
+}

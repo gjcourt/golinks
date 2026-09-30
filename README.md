@@ -82,8 +82,8 @@ for the full details.
 GoLinks follows a hexagonal (ports and adapters) layout: the domain layer
 (`internal/domain/`) has no infrastructure dependencies, and the storage and HTTP
 adapters (`internal/adapters/`) plug into it through interfaces defined in
-`internal/ports/`. The dependency rule — adapters depend on ports/app/domain, never
-the reverse, and adapters never depend on each other — is enforced in CI by
+`internal/ports/`. The inward dependency rule — adapters may depend on ports, app, and domain, never
+the reverse, and the domain imports nothing internal — is enforced in CI by
 `go-arch-lint`. See
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) for the
 full picture including request flows, and [`docs/`](docs/) for the rest of the

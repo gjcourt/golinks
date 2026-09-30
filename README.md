@@ -14,7 +14,7 @@ authentication.
 
 ## Quick start
 
-Needs: Go 1.27.
+Needs: Go 1.26 or newer (the `go.mod` minimum; CI builds with 1.27).
 
 ```bash
 git clone https://github.com/gjcourt/golinks && cd golinks
@@ -58,7 +58,7 @@ Everything is configured through environment variables; there is no config file.
 | `GOLINKS_PORT` | `8080` | Port to listen on |
 | `DATABASE_URL` | unset — in-memory | Storage backend, see below |
 | `GOLINKS_AUTH_MODE` | `none` | `none`, `local`, or `proxy` |
-| `GOLINKS_AUTH_SECRET` | random on each start | Secret used to sign session cookies |
+| `GOLINKS_AUTH_SECRET` | random on each start (`local` mode) | Secret used to sign session cookies |
 | `GOLINKS_API_KEY` | unset | Bearer token accepted for API requests |
 | `GOLINKS_COOKIE_SECURE` | `false` | Set `true` to mark the session cookie `Secure` |
 | `GOLINKS_AUTH_HEADER` | `Remote-User` | Header read for the username in `proxy` mode |

@@ -1,195 +1,113 @@
+<!-- readme-type: service -->
 # GoLinks
 
-A self-hosted go links service written in Go. Create short, memorable links like `go/docs` that redirect to longer URLs.
+Self-hosted go-links service that redirects short paths like go/docs to full URLs
 
-## Features
+Sharing long, hard-to-remember URLs for internal docs, dashboards, and tools creates
+friction across a team. GoLinks lets people register short paths like `go/docs` that
+redirect to those URLs, tracks click counts per link, and supports parameterized
+patterns such as `go/gh/{repo}/{pr}`. It ships as a single Go binary with a pluggable
+storage backend — in-memory, SQLite, or PostgreSQL — and optional local or SSO-proxy
+authentication.
 
-- 🔗 Create short links (e.g., `go/docs` → `https://docs.google.com/...`)
-- ✳️ Parameterized links with named parts (e.g., `go/gh/{repo}/{pr}` → `https://github.com/org/{repo}/pull/{pr}`, so `go/gh/api/10` resolves that pull request); the older single trailing `*` still works
-- 📊 Track click statistics
-- 🎨 Clean, modern web UI for managing links
-- 🚀 Fast and lightweight
-- 💾 **In-Memory** (default) or **PostgreSQL** storage
-- 🔐 **Local**, **Proxy**, or **None** (public) authentication
-- 🔌 RESTful API for programmatic access
+**Status:** running on the homelab (production and staging) since 2026-02.
 
-## Documentation
+## Quick start
 
-Full documentation is available in the [`docs/`](docs/) directory:
-
-- [**Authentication**](docs/authentication.md): Setup Local (username/password), Proxy (SSO), or None.
-- [**Database**](docs/database.md): Configure In-Memory or PostgreSQL storage.
-- [**API Reference**](docs/api.md): Endpoints and usage.
-- [**Admin Portal**](docs/admin.md): Managing links and themes.
-- [**Architecture**](docs/architecture.md): Hexagonal architecture details.
-
-## Quick Start
-
-### Prerequisites
-
-- Go 1.21 or later
-
-### Installation
+Needs: Go 1.26 or newer (the `go.mod` minimum; CI builds with 1.27).
 
 ```bash
-# Clone the repository
-cd golinks
-
-# Download dependencies
-go mod download
-
-# Run (In-Memory DB, No Auth)
-go run cmd/golinks/main.go
+git clone https://github.com/gjcourt/golinks && cd golinks
+go run ./cmd/golinks
 ```
 
-The server will start on `http://localhost:8080`.
-By default, the **Admin Portal** is publicly accessible at `http://localhost:8080/admin`.
+Open <http://localhost:8080/admin> to create and manage links. The server starts
+with an in-memory store and no authentication.
 
-### Configuration
+## Usage
 
-Environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GOLINKS_PORT` | Port to listen on | `8080` |
-| `DATABASE_URL` | PostgreSQL connection string (if unset, uses In-Memory) | — |
-| `GOLINKS_AUTH_MODE` | `none`, `local`, or `proxy` | `none` |
-
-### Authentication
-
-By default, authentication is **disabled** (`GOLINKS_AUTH_MODE=none`).
-
-To enable **Local Authentication** (username/password):
-
-```bash
-export GOLINKS_AUTH_MODE=local
-# Optional: persistent secret for sessions (highly recommended for production)
-export GOLINKS_AUTH_SECRET=my-random-secret-key
-
-go run cmd/golinks/main.go
-```
-
-1. Visit `http://localhost:8080/register` to create your first admin user.
-2. Login at `http://localhost:8080/login`.
-
-For more details on **Proxy Authentication** and **API Keys**, see [docs/authentication.md](docs/authentication.md).
-2. Click "New Link" to create a link
-3. Enter a shortcode (e.g., `docs`) and destination URL
-4. Click "Save Link"
-5. Access your link at `http://localhost:8080/docs`
-
-### API
-
-#### List all links
-
-```bash
-curl http://localhost:8080/api/links
-```
-
-#### Create a link
+Create a link through the API:
 
 ```bash
 curl -X POST http://localhost:8080/api/links \
   -H "Content-Type: application/json" \
-  -d '{"shortcode": "docs", "url": "https://docs.example.com", "description": "Documentation"}'
+  -d '{"shortcode": "docs", "url": "https://docs.example.com", "description": "Team docs"}'
 ```
 
-##### Parameterized links
+`GET /docs` now redirects to `https://docs.example.com`.
 
-Name each part you want to capture with `{name}` — one whole path segment
-each — and use the same names in the destination:
+A shortcode segment written as `{name}` captures one path segment and substitutes it
+into the destination, so one link can cover a whole class of URLs:
 
 ```bash
 curl -X POST http://localhost:8080/api/links \
   -H "Content-Type: application/json" \
-  -d '{"shortcode": "gh/{repo}/{pr}", "url": "https://github.com/intrinsic-org/{repo}/pull/{pr}"}'
+  -d '{"shortcode": "gh/{repo}/{pr}", "url": "https://github.com/example/{repo}/pull/{pr}"}'
 ```
 
-Now `go/gh/api/10` redirects to `https://github.com/intrinsic-org/api/pull/10`.
+`GET /gh/api/10` now redirects to `https://github.com/example/api/pull/10`. Full
+request/response bodies and the matching rules for named parameters are in
+[`docs/reference/2026-05-02-api.md`](docs/reference/2026-05-02-api.md).
 
-- Names are lowercase letters, digits and `_`, starting with a letter. Parameters can go in any segment after the first, with literals between them: `gh/{repo}/pull/{n}`.
-- The destination must use every parameter at least once and no others; a parameter may appear more than once (`…/{repo}?from={repo}`). Parameters can't be in the destination's host.
-- A path matches only with exactly as many segments as the pattern — `go/gh/api/10/files` does **not** match `gh/{repo}/{pr}`.
-- An exact shortcode always wins over a pattern. Among patterns, the one with more literal segments wins (`gh/homelab/{pr}` beats `gh/{repo}/{pr}` for `go/gh/homelab/5`).
-- Each captured value is restricted to `A–Z a–z 0–9 . _ -` and percent-encoded before substitution, so it cannot change the destination scheme/host or inject another URL. Anything else 404s.
-- The original form — a single trailing `*` with one `*` in the destination (`pulls/*` → `…/pull/*`) — still works and behaves as one unnamed parameter. For more than one part, use names.
+## Configuration
 
-#### Get a link
+Everything is configured through environment variables; there is no config file.
 
-```bash
-curl http://localhost:8080/api/links/docs
-```
+| Variable | Default | Meaning |
+|---|---|---|
+| `GOLINKS_PORT` | `8080` | Port to listen on |
+| `DATABASE_URL` | unset — in-memory | Storage backend, see below |
+| `GOLINKS_AUTH_MODE` | `none` | `none`, `local`, or `proxy` |
+| `GOLINKS_AUTH_SECRET` | random on each start (`local` mode) | Secret used to sign session cookies |
+| `GOLINKS_API_KEY` | unset | Bearer token accepted for API requests |
+| `GOLINKS_COOKIE_SECURE` | `false` | Set `true` to mark the session cookie `Secure` |
+| `GOLINKS_AUTH_HEADER` | `Remote-User` | Header read for the username in `proxy` mode |
+| `GOLINKS_AUTH_TRUSTED_PROXIES` | trust all | Comma-separated IPs/CIDRs trusted to set that header |
 
-#### Update a link
+`DATABASE_URL` selects the storage backend by its scheme: unset for in-memory,
+`sqlite:///path/to/golinks.db` for SQLite, or
+`postgres://user:pass@host:5432/db?sslmode=disable` for PostgreSQL. Tables are
+created automatically on startup; there are no manual migrations to run.
 
-```bash
-curl -X PUT http://localhost:8080/api/links/docs \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://new-docs.example.com"}'
-```
+`GOLINKS_AUTH_MODE` selects the authentication mode: `none` leaves the admin UI and
+API public, `local` stores username/password accounts in the database (register the
+first user at `/register`), and `proxy` trusts a username header set by a reverse
+proxy such as Authelia or oauth2-proxy. In `local` or `proxy` mode, API requests can
+also authenticate with `Authorization: Bearer $GOLINKS_API_KEY`. See
+[`docs/reference/2026-05-02-authentication.md`](docs/reference/2026-05-02-authentication.md)
+for the full details.
 
-#### Delete a link
+## How it works
 
-```bash
-curl -X DELETE http://localhost:8080/api/links/docs
-```
-
-#### Get link statistics
-
-```bash
-curl http://localhost:8080/api/links/docs/stats
-```
-
-## DNS Setup (Optional)
-
-For the full `go/shortcode` experience, configure your DNS:
-
-1. Add a DNS entry for `go` pointing to your server's IP
-2. Or add to `/etc/hosts`: `127.0.0.1 go`
-
-Then access links as `http://go/docs`.
+GoLinks follows a hexagonal (ports and adapters) layout: the domain layer
+(`internal/domain/`) has no infrastructure dependencies, and the storage and HTTP
+adapters (`internal/adapters/`) plug into it through interfaces defined in
+`internal/ports/`. The inward dependency rule — adapters may depend on ports, app, and domain, never
+the reverse, and the domain imports nothing internal — is enforced in CI by
+`go-arch-lint`. See
+[`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) for the
+full picture including request flows, and [`docs/`](docs/) for the rest of the
+reference and operations documentation.
 
 ## Development
 
 ```bash
-# Run with hot reload (using air)
-go install github.com/cosmtrek/air@latest
-air
-
-# Run tests
-go test ./...
+make lint          # golangci-lint run ./... — same as CI
+make test           # go test -race -v ./... — same as CI
+go-arch-lint check  # hexagonal boundaries — same as the CI arch-guard job
+make build          # go build -o golinks ./cmd/golinks
 ```
 
-## Project Structure — Hexagonal Architecture
+Conventions for contributors and agents: [AGENTS.md](AGENTS.md).
 
-```
-golinks/
-├── cmd/golinks/
-│   └── main.go                        # Composition root — wires adapters to domain
-├── internal/
-│   ├── domain/
-│   │   ├── link.go                    # Entities (Link, LinkStats) and domain errors
-│   │   ├── ports.go                   # Port interfaces: LinkRepository, LinkService
-│   │   ├── service.go                 # Business-logic implementation of LinkService
-│   │   └── service_test.go            # Unit tests (mock repository)
-│   └── adapter/
-│       ├── http/
-│       │   ├── handler.go             # Driving adapter — HTTP handlers
-│       │   ├── handler_test.go        # httptest-based tests (mock service)
-│       │   ├── middleware.go          # Auth middleware (local, proxy, API key)
-│       │   ├── middleware_test.go     # Auth middleware tests
-│       │   └── templates.go           # HTML templates
-│       ├── postgres/
-│       │   └── repository.go          # Driven adapter — PostgreSQL
-│       └── sqlite/
-│           └── repository.go          # Driven adapter — SQLite
-├── .github/
-│   └── copilot-instructions.md        # Coding conventions & PR guidelines
-├── Dockerfile
-├── Makefile
-└── README.md
-```
+## Deployment
+
+Every push to `master` builds a multi-arch image and publishes it to
+`ghcr.io/gjcourt/golinks`, tagged `latest`, the build date, and an immutable
+`<date>-<sha7>` — see [AGENTS.md](AGENTS.md#container-image) for the tagging
+scheme. GoLinks runs on the homelab in production and staging — see the
+[runbook](https://github.com/gjcourt/homelab/blob/master/docs/operations/apps/golinks.md).
 
 ## License
 
-MIT License
+[Apache-2.0](LICENSE).

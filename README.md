@@ -110,4 +110,4 @@ scheme. GoLinks runs on the homelab in production and staging — see the
 
 ## License
 
-[Apache-2.0](LICENSE).
+[Apache-2.0](LICENSE)

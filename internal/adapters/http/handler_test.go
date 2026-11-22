@@ -422,8 +422,24 @@ func TestRedirect_NotFound(t *testing.T) {
 	if w.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
 	}
-	if loc := w.Header().Get("Location"); loc != "/admin?new=nope" {
-		t.Errorf("Location = %q, want %q", loc, "/admin?new=nope")
+	if loc := w.Header().Get("Location"); loc != "/_admin?new=nope" {
+		t.Errorf("Location = %q, want %q", loc, "/_admin?new=nope")
+	}
+}
+
+// TestAdminPathIsShortcode verifies the old /admin path is no longer reserved:
+// it resolves like any other shortcode, so an unknown "admin" lands on the
+// create page at /_admin.
+func TestAdminPathIsShortcode(t *testing.T) {
+	r := setupRouter(newMockService())
+	req := httptest.NewRequest("GET", "/admin", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
+	}
+	if loc := w.Header().Get("Location"); loc != "/_admin?new=admin" {
+		t.Errorf("Location = %q, want %q", loc, "/_admin?new=admin")
 	}
 }
 
@@ -437,8 +453,8 @@ func TestRedirect_NotFound_WildcardShortcodeEscaped(t *testing.T) {
 	if w.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
 	}
-	if loc := w.Header().Get("Location"); loc != "/admin?new=pulls%2F123" {
-		t.Errorf("Location = %q, want %q", loc, "/admin?new=pulls%2F123")
+	if loc := w.Header().Get("Location"); loc != "/_admin?new=pulls%2F123" {
+		t.Errorf("Location = %q, want %q", loc, "/_admin?new=pulls%2F123")
 	}
 }
 
@@ -527,11 +543,11 @@ func TestRedirect_Wildcard_EndToEnd(t *testing.T) {
 		{"resolves", "/pulls/10", http.StatusFound, "https://github.com/gjcourt/homelab/pull/10"},
 		// Non-resolving shortcodes no longer 404: they 302 to the admin
 		// create-link page with the (query-escaped) shortcode pre-filled.
-		{"multi-segment-create", "/pulls/10/extra", http.StatusFound, "/admin?new=pulls%2F10%2Fextra"},
+		{"multi-segment-create", "/pulls/10/extra", http.StatusFound, "/_admin?new=pulls%2F10%2Fextra"},
 		// A colon (scheme-like) survives path cleaning but fails the capture
 		// charset check in the resolver -> not resolved, offered for creation.
-		{"unsafe-capture-create", "/pulls/a:b", http.StatusFound, "/admin?new=pulls%2Fa%3Ab"},
-		{"prefix-miss-create", "/issues/10", http.StatusFound, "/admin?new=issues%2F10"},
+		{"unsafe-capture-create", "/pulls/a:b", http.StatusFound, "/_admin?new=pulls%2Fa%3Ab"},
+		{"prefix-miss-create", "/issues/10", http.StatusFound, "/_admin?new=issues%2F10"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -619,7 +635,7 @@ func TestHomePage(t *testing.T) {
 
 func TestAdminPage(t *testing.T) {
 	r := setupRouter(newMockService())
-	req := httptest.NewRequest("GET", "/admin", nil)
+	req := httptest.NewRequest("GET", "/_admin", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -656,8 +672,8 @@ func TestLoginPage_NoneMode_RedirectsToAdmin(t *testing.T) {
 	if w.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
 	}
-	if loc := w.Header().Get("Location"); loc != "/admin" {
-		t.Errorf("Location = %q, want /admin", loc)
+	if loc := w.Header().Get("Location"); loc != "/_admin" {
+		t.Errorf("Location = %q, want /_admin", loc)
 	}
 }
 
@@ -681,8 +697,8 @@ func TestHandleLogin_Success(t *testing.T) {
 	if w.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
 	}
-	if loc := w.Header().Get("Location"); loc != "/admin" {
-		t.Errorf("Location = %q, want /admin", loc)
+	if loc := w.Header().Get("Location"); loc != "/_admin" {
+		t.Errorf("Location = %q, want /_admin", loc)
 	}
 	// Should have set a session cookie
 	cookies := w.Result().Cookies()
@@ -752,7 +768,7 @@ func TestAdminPage_AuthRequired(t *testing.T) {
 	NewHandler(newMockService(), cfg, userRepo).RegisterRoutes(r)
 
 	// Without cookie — browser request should redirect to /login
-	req := httptest.NewRequest("GET", "/admin", nil)
+	req := httptest.NewRequest("GET", "/_admin", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusFound {

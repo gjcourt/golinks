@@ -32,7 +32,7 @@ func TestRequireAuth_NoneMode(t *testing.T) {
 func TestRequireAuth_LocalMode(t *testing.T) {
 	const (
 		testUser  = "admin"
-		adminPath = "/admin"
+		adminPath = "/_admin"
 	)
 	secret, _ := GenerateRandomSecret()
 	cfg := DefaultAuthConfig()
@@ -57,7 +57,7 @@ func TestRequireAuth_LocalMode(t *testing.T) {
 		{
 			name:  "no-cookie-browser-redirects-to-login",
 			setup: func(r *http.Request) {},
-			// /admin is not /api/ so browser redirect
+			// /_admin is not /api/ so browser redirect
 			wantStatus: http.StatusFound,
 			apiPath:    false,
 		},

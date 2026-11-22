@@ -14,7 +14,7 @@ GoLinks supports three authentication modes: **`none`**, **`local`**, and **`pro
 ## Modes Overview
 
 ### `none` (Default)
-Authentication is completely disabled. The admin portal (`/admin`) and API (`/api/*`) are public and accessible without credentials. This is useful for:
+Authentication is completely disabled. The admin portal (`/_admin`) and API (`/api/*`) are public and accessible without credentials. This is useful for:
 - Testing and development.
 - Secure, private networks where everyone is trusted.
 - Environments where authentication is handled externally by a proxy that intercepts all requests.

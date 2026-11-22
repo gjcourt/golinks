@@ -341,7 +341,7 @@ const homeTemplate = `<!DOCTYPE html>
     <div class="container">
         <h1>🔗 GoLinks</h1>
         <p>Create and manage short links for your team</p>
-        <a href="/admin" class="btn">Open Admin Panel</a>
+        <a href="/_admin" class="btn">Open Admin Panel</a>
     </div>
     <script>
         function setTheme(theme) {
@@ -612,7 +612,7 @@ const adminTemplate = `<!DOCTYPE html>
             await loadCurrentUser();
             loadLinks();
             // If we arrived here from a missing-link 404 redirect
-            // (/admin?new=<shortcode>), open the create form with the
+            // (/_admin?new=<shortcode>), open the create form with the
             // shortcode pre-filled so the admin can just type the target.
             const prefill = new URLSearchParams(location.search).get('new');
             if (prefill) {

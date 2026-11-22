@@ -119,8 +119,8 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 
 	// Protected admin page
 	adminHandler := authMW(http.HandlerFunc(h.AdminPage))
-	r.Handle("/admin", adminHandler).Methods("GET")
-	r.Handle("/admin/", adminHandler).Methods("GET")
+	r.Handle("/_admin", adminHandler).Methods("GET")
+	r.Handle("/_admin/", adminHandler).Methods("GET")
 
 	// Public routes. {shortcode:.+} captures multi-segment paths so wildcard
 	// links like go/pulls/10 (path "pulls/10") reach the redirect handler;
@@ -157,7 +157,7 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 		// slashes and other characters. Anonymous visitors will be bounced to
 		// /login by the admin auth middleware, which is the intended behavior —
 		// this flow is for the logged-in admin.
-		http.Redirect(w, r, "/admin?new="+url.QueryEscape(shortcode), http.StatusFound)
+		http.Redirect(w, r, "/_admin?new="+url.QueryEscape(shortcode), http.StatusFound)
 		return
 	}
 	if err != nil {
@@ -300,7 +300,7 @@ func (h *Handler) HomePage(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(homeTemplate))
 }
 
-// AdminPage serves GET /admin.
+// AdminPage serves GET /_admin.
 func (h *Handler) AdminPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(adminTemplate))
@@ -310,12 +310,12 @@ func (h *Handler) AdminPage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 	// If auth is disabled, redirect straight to admin.
 	if h.auth.Mode == AuthModeNone {
-		http.Redirect(w, r, "/admin", http.StatusFound)
+		http.Redirect(w, r, "/_admin", http.StatusFound)
 		return
 	}
 	// If already authenticated via session/proxy, redirect to admin.
 	if h.auth.Mode == AuthModeProxy {
-		http.Redirect(w, r, "/admin", http.StatusFound)
+		http.Redirect(w, r, "/_admin", http.StatusFound)
 		return
 	}
 
@@ -333,7 +333,7 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 // HandleLogin handles POST /login (local auth mode only).
 func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if h.auth.Mode != AuthModeLocal {
-		http.Redirect(w, r, "/admin", http.StatusFound)
+		http.Redirect(w, r, "/_admin", http.StatusFound)
 		return
 	}
 
@@ -373,7 +373,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	http.Redirect(w, r, "/admin", http.StatusFound)
+	http.Redirect(w, r, "/_admin", http.StatusFound)
 }
 
 // HandleLogout handles POST /logout.
@@ -396,7 +396,7 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 // be created through an authenticated admin flow, not by anonymous visitors.
 func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
 	if h.auth.Mode != AuthModeLocal {
-		http.Redirect(w, r, "/admin", http.StatusFound)
+		http.Redirect(w, r, "/_admin", http.StatusFound)
 		return
 	}
 	n, err := h.users.CountUsers()
@@ -422,7 +422,7 @@ func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
 // themselves a non-admin account and obtain API access.
 func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	if h.auth.Mode != AuthModeLocal {
-		http.Redirect(w, r, "/admin", http.StatusFound)
+		http.Redirect(w, r, "/_admin", http.StatusFound)
 		return
 	}
 	n, err := h.users.CountUsers()

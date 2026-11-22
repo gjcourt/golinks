@@ -194,7 +194,7 @@ without knowing the backend.
      link.
    - No match → `domain.ErrNotFound`.
 3. The handler issues a `302` to `link.URL` on success. On `ErrNotFound` it
-   redirects to `/admin?new=<shortcode>` (a create-link affordance for a
+   redirects to `/_admin?new=<shortcode>` (a create-link affordance for a
    logged-in admin; anonymous users get bounced to `/login` by the middleware).
 
 ## External integrations & design decisions

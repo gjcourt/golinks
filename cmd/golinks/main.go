@@ -49,7 +49,7 @@ func main() {
 	}
 
 	slog.Info("server starting", "url", "http://localhost:"+port)
-	slog.Info("admin ui", "url", "http://localhost:"+port+"/admin")
+	slog.Info("admin ui", "url", "http://localhost:"+port+"/_admin")
 	slog.Info("auth mode", "mode", authCfg.Mode)
 
 	// In local mode, check whether any users exist and hint at setup.

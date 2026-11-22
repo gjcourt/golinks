@@ -13,7 +13,7 @@ The Admin Portal provides a user-friendly interface for managing your short link
 
 ## Access
 
-Navigate to `http://localhost:8080/admin` in your web browser.
+Navigate to `http://localhost:8080/_admin` in your web browser.
 
 - **Authentication**: By default (`GOLINKS_AUTH_MODE=none`), the admin portal is public.
 - **Enable Auth**: Set `GOLINKS_AUTH_MODE=local` to require login.

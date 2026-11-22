@@ -66,7 +66,7 @@ internal/
 - Auth is an **adapter-layer concern** — lives in `internal/adapters/http/middleware.go`.
 - Three modes: `none` (default), `local` (username/password + session cookie), `proxy` (trusted reverse-proxy header, e.g. Authelia).
 - `AuthConfig` is built in the composition root (`cmd/golinks/main.go`) from env vars and passed to `NewHandler(svc, authCfg)`.
-- `RequireAuth(cfg)` middleware wraps the `/api` subrouter and `/admin` routes; `GET /{shortcode}` and `GET /` remain public.
+- `RequireAuth(cfg)` middleware wraps the `/api` subrouter and `/_admin` routes; `GET /{shortcode}` and `GET /` remain public.
 - API key (`Bearer` token) works in both `local` and `proxy` modes for programmatic access.
 - Session cookies use HMAC-SHA256 signing with configurable expiry.
 

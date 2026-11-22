@@ -21,7 +21,7 @@ git clone https://github.com/gjcourt/golinks && cd golinks
 go run ./cmd/golinks
 ```
 
-Open <http://localhost:8080/admin> to create and manage links. The server starts
+Open <http://localhost:8080/_admin> to create and manage links. The server starts
 with an in-memory store and no authentication.
 
 ## Usage
